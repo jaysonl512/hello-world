@@ -142,7 +142,7 @@ input:focus, select:focus { outline: 2px solid #a855f7; outline-offset: 1px; }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
 .setup-grid > .panel + .panel { margin-top: 0; }
 .names { display: flex; align-items: center; gap: 0.7rem; }
-.names input { flex: 1; font-size: 1.3rem; font-weight: 600; }
+.names input { flex: 1; width: 0; font-size: 1.3rem; font-weight: 600; }
 .names input.p0 { border-color: var(--p0); }
 .names input.p1 { border-color: var(--p1); }
 .vs { color: var(--muted); font-weight: 800; }
@@ -485,7 +485,7 @@ code.copy.copied::after { content: '  ✓ copied'; color: var(--spotify); }
 /* ---------- Small screens (host phone/laptop) ---------- */
 @media (max-width: 900px) {
   :root { font-size: 15px; }
-  .setup-grid { grid-template-columns: 1fr; }
+  .setup-grid { grid-template-columns: minmax(0, 1fr); }
   .setup .logo { font-size: 3.5rem; }
   .topbar { grid-template-columns: 1fr 1fr; }
   .center-title { grid-column: 1 / -1; grid-row: 1; flex-direction: row; justify-content: space-between; }
