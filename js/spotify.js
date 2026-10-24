@@ -270,18 +270,25 @@ export function unlockAudio() {
   sdk.player?.activateElement?.();
 }
 
+// Resolves the device to play on. A chosen device that has gone offline falls back to whatever
+// Spotify app is available rather than failing every song.
 async function targetDevice() {
+  if (usingSdk()) return { id: await initPlayer(), name: 'this browser' };
   const pref = getDevicePreference();
-  if (pref && pref !== SDK_DEVICE) return pref;
-  if (browserPlaybackSupported) return initPlayer();
-  const devices = (await getDevices()).filter((d) => !d.is_restricted);
-  const device = devices.find((d) => d.is_active) ?? devices.find((d) => d.type === 'Smartphone') ?? devices[0];
-  if (!device) throw new Error(NO_DEVICE);
-  return device.id;
+  const devices = (await getDevices()).filter((d) => !d.is_restricted && d.name !== 'Hitster TV');
+  const device =
+    devices.find((d) => d.id === pref) ??
+    devices.find((d) => d.is_active) ??
+    devices.find((d) => d.type === 'Smartphone') ??
+    devices[0];
+  if (device) return device;
+  if (browserPlaybackSupported) return { id: await initPlayer(), name: 'this browser' };
+  throw new Error(NO_DEVICE);
 }
 
+// Returns the name of the device the song is playing on.
 export async function playTrack(uri) {
-  const deviceId = await targetDevice();
+  const { id: deviceId, name } = await targetDevice();
   try {
     await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
   } catch (err) {
@@ -292,6 +299,7 @@ export async function playTrack(uri) {
     });
     await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
   }
+  return name;
 }
 
 export async function pause() {

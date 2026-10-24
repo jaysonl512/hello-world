@@ -66,8 +66,8 @@ async function playCurrent() {
   try {
     const uri = await S.findTrack(G.song(songId));
     if (ui.game?.turn?.songId !== songId) return; // turn moved on while we searched
-    await S.playTrack(uri);
-    ui.music = { songId, status: 'playing', error: null };
+    const device = await S.playTrack(uri);
+    ui.music = { songId, status: 'playing', error: null, device };
   } catch (err) {
     if (ui.game?.turn?.songId !== songId) return;
     ui.music = { songId, status: 'error', error: err.message, notFound: !!err.notFound };
@@ -229,7 +229,7 @@ function musicBar() {
   if (!spotifyOn()) return `<div class="music muted">🔇 Silent mode, Spotify isn't connected</div>`;
   const label = {
     loading: 'Finding the song…',
-    playing: 'Now playing',
+    playing: m.device ? `Now playing on ${esc(m.device)}` : 'Now playing',
     paused: 'Paused',
     error: `⚠ ${esc(m.error ?? 'Playback failed')}`,
     off: 'Ready',
