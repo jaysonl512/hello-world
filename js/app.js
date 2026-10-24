@@ -68,7 +68,7 @@ async function playCurrent() {
     ui.music = { songId, status: 'playing', error: null };
   } catch (err) {
     if (ui.game?.turn?.songId !== songId) return;
-    ui.music = { songId, status: 'error', error: err.message };
+    ui.music = { songId, status: 'error', error: err.message, notFound: !!err.notFound };
   }
   render();
   prefetchNext();
@@ -99,7 +99,7 @@ async function togglePause() {
 }
 
 function onPlayerState(state) {
-  if (!state || S.getDevicePreference() !== S.SDK_DEVICE) return;
+  if (!state || !S.usingSdk()) return;
   if (ui.music.status === 'playing' || ui.music.status === 'paused') {
     const status = state.paused ? 'paused' : 'playing';
     if (status !== ui.music.status) {
@@ -125,7 +125,7 @@ async function refreshSpotify() {
     ui.spotify = { ...ui.spotify, profile, devices, error: null };
     if (profile.product !== 'premium') {
       ui.spotify.error = 'Spotify Premium is required to control playback. You can still play in silent mode.';
-    } else if (S.getDevicePreference() === S.SDK_DEVICE) {
+    } else if (S.usingSdk()) {
       S.initPlayer({ onState: onPlayerState, onError: onPlayerError }).catch(onPlayerError);
     }
   } catch (err) {
@@ -244,7 +244,7 @@ function musicBar() {
   }[m.status];
   const eq = m.status === 'playing' ? '<span class="eq"><i></i><i></i><i></i><i></i><i></i></span>' : '';
   const errorFix =
-    m.status === 'error' && ui.game?.turn?.phase === 'listen'
+    m.status === 'error' && m.notFound && ui.game?.turn?.phase === 'listen'
       ? `<button class="btn small ghost-btn" data-action="replace-song">Swap song (free)</button>`
       : '';
   return `
@@ -358,7 +358,9 @@ function spotifyPanel() {
   }
   const pref = S.getDevicePreference();
   const options = [
-    `<option value="${S.SDK_DEVICE}" ${pref === S.SDK_DEVICE ? 'selected' : ''}>This browser tab (cast the tab to your TV)</option>`,
+    `<option value="${S.SDK_DEVICE}" ${pref === S.SDK_DEVICE ? 'selected' : ''}>${
+      S.browserPlaybackSupported ? 'This browser tab (cast the tab to your TV)' : 'Auto: the Spotify app that is open'
+    }</option>`,
     ...sp.devices
       .filter((d) => d.name !== 'Hitster TV')
       .map((d) => `<option value="${esc(d.id)}" ${pref === d.id ? 'selected' : ''}>${esc(d.name)} (${esc(d.type)})</option>`),
@@ -376,7 +378,11 @@ function spotifyPanel() {
           <button class="btn small" data-action="refresh-devices" title="Refresh devices">↻</button>
         </div>
       </label>
-      <p class="hint small">Tip: open Spotify on your TV or speaker first and it'll show up here.</p>
+      <p class="hint small">${
+        S.browserPlaybackSupported
+          ? "Tip: open Spotify on your TV or speaker first and it'll show up here."
+          : 'On a phone, music plays through the Spotify app. Open Spotify (on this phone or your TV) and play any song for a second so it shows up here.'
+      }</p>
       ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
       <button class="btn small ghost-btn" data-action="disconnect">Disconnect</button>
     </div>`;
@@ -663,7 +669,7 @@ app.addEventListener('click', (e) => {
 app.addEventListener('change', (e) => {
   if (e.target.id === 'device') {
     S.setDevicePreference(e.target.value);
-    if (e.target.value === S.SDK_DEVICE) S.initPlayer({ onState: onPlayerState, onError: onPlayerError }).catch(onPlayerError);
+    if (S.usingSdk()) S.initPlayer({ onState: onPlayerState, onError: onPlayerError }).catch(onPlayerError);
     if (ui.game?.turn && ui.music.status !== 'off') playCurrent();
   } else if (['name0', 'name1', 'target', 'tokens'].includes(e.target.id)) {
     readSetupForm();

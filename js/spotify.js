@@ -21,7 +21,19 @@ const LS = {
   device: 'hitster.spotify.device',
 };
 
+// The default device choice: this browser tab on desktop, or "whatever Spotify app is open" on phones.
 export const SDK_DEVICE = 'sdk';
+
+// Spotify's Web Playback SDK only supports desktop browsers.
+export const browserPlaybackSupported = !(
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+);
+
+export const usingSdk = () => browserPlaybackSupported && getDevicePreference() === SDK_DEVICE;
+
+const NO_DEVICE =
+  'No Spotify device found. Open the Spotify app (on this phone or your TV), play any song for a second, then tap ▶ Play.';
 
 export const redirectUri = () => location.origin + location.pathname;
 
@@ -199,7 +211,11 @@ export async function findTrack(song) {
     }
     if (best && best.score >= 14) break;
   }
-  if (!best || best.score < 5) throw new Error(`Couldn't find "${song.title}" by ${song.artist} on Spotify.`);
+  if (!best || best.score < 5) {
+    const err = new Error(`Couldn't find "${song.title}" by ${song.artist} on Spotify.`);
+    err.notFound = true;
+    throw err;
+  }
   trackCache[song.id] = best.uri;
   save(LS.trackCache, trackCache);
   return best.uri;
@@ -256,8 +272,12 @@ export function unlockAudio() {
 
 async function targetDevice() {
   const pref = getDevicePreference();
-  if (pref === SDK_DEVICE || !pref) return initPlayer();
-  return pref;
+  if (pref && pref !== SDK_DEVICE) return pref;
+  if (browserPlaybackSupported) return initPlayer();
+  const devices = (await getDevices()).filter((d) => !d.is_restricted);
+  const device = devices.find((d) => d.is_active) ?? devices.find((d) => d.type === 'Smartphone') ?? devices[0];
+  if (!device) throw new Error(NO_DEVICE);
+  return device.id;
 }
 
 export async function playTrack(uri) {
@@ -267,17 +287,19 @@ export async function playTrack(uri) {
   } catch (err) {
     if (err.status !== 404) throw err;
     // Device went idle; wake it with a transfer, then retry.
-    await api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } });
+    await api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } }).catch((e) => {
+      throw e.status === 404 ? new Error(NO_DEVICE) : e;
+    });
     await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
   }
 }
 
 export async function pause() {
-  if (getDevicePreference() === SDK_DEVICE && sdk.player) return sdk.player.pause();
+  if (usingSdk() && sdk.player) return sdk.player.pause();
   await api('/me/player/pause', { method: 'PUT' }).catch(() => {});
 }
 
 export async function resume() {
-  if (getDevicePreference() === SDK_DEVICE && sdk.player) return sdk.player.resume();
+  if (usingSdk() && sdk.player) return sdk.player.resume();
   await api('/me/player/play', { method: 'PUT' });
 }
