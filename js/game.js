@@ -1,20 +1,17 @@
 // Pure game rules. State is a plain JSON object so it can be saved to localStorage and
 // survive a page refresh mid-game.
 //
-// Rules (Hitster, 2 players):
-//  - Each player starts with one face-up card in their timeline.
+// Rules (2 players, house rules):
+//  - Each player starts with one face-up card in their timeline and no tokens.
 //  - On your turn a mystery song plays. Place it in your timeline where you think its year fits.
-//  - The opponent may spend a token to challenge by picking a different spot. If you were
-//    wrong and they were right, they steal the card into their own timeline.
-//  - Name the artist AND title before the reveal to earn a token (max 5).
-//  - Spend 1 token to skip a song, or 3 tokens to take the card for free.
+//  - Name the artist AND title to earn a token, whether or not the placement was right.
+//  - At the start of a turn, before the song plays, you may trade 3 tokens to steal any one
+//    card from your opponent's timeline.
 //  - First to the target number of cards wins.
 
 import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js';
 
-export const MAX_TOKENS = 5;
-export const SKIP_COST = 1;
-export const BUY_COST = 3;
+export const STEAL_COST = 3;
 
 const shuffle = (arr) => {
   const a = [...arr];
@@ -38,7 +35,7 @@ export function newGame({ names, target, startTokens, decades }) {
   const minCards = target * 2 + 2;
   if (deck.length < minCards) throw new Error(`Pick more decades: need at least ${minCards} songs, have ${deck.length}.`);
   const state = {
-    version: 1,
+    version: 2,
     settings: { target, startTokens, decades },
     players: names.map((name) => ({ name, timeline: [deck.pop()], tokens: startTokens })),
     deck,
@@ -50,16 +47,21 @@ export function newGame({ names, target, startTokens, decades }) {
   return startTurn(state);
 }
 
-function startTurn(state) {
+export const canSteal = (state) =>
+  state.players[state.current].tokens >= STEAL_COST && state.players[opponentOf(state)].timeline.length > 0;
+
+// A turn opens with the steal offer (only if affordable), then the song plays in 'listen'.
+function startTurn(state, { offerSteal = true } = {}) {
   if (!state.deck.length) return { ...state, turn: null, winner: leader(state) };
   const deck = [...state.deck];
   const songId = deck.pop();
-  return {
+  const next = {
     ...state,
     deck,
     turnNumber: state.turnNumber + 1,
-    turn: { songId, phase: 'listen', place: null, challenge: null, result: null, named: false },
+    turn: { songId, phase: 'listen', place: null, stealPick: null, result: null, named: false },
   };
+  return offerSteal && canSteal(next) ? { ...next, turn: { ...next.turn, phase: 'steal' } } : next;
 }
 
 // Index i means "insert before timeline[i]"; i === timeline.length means at the end.
@@ -93,55 +95,41 @@ export function choosePlacement(state, i) {
 }
 
 export function lockPlacement(state) {
-  const { turn } = state;
-  if (turn?.phase !== 'listen' || turn.place == null) return state;
-  const canChallenge = state.players[opponentOf(state)].tokens > 0;
-  const next = { ...state, turn: { ...turn, phase: canChallenge ? 'challenge' : 'reveal' } };
-  return canChallenge ? next : reveal(next);
-}
-
-export function chooseChallenge(state, i) {
-  const { turn } = state;
-  if (turn?.phase !== 'challenge' || i === turn.place) return state;
-  return { ...state, turn: { ...turn, challenge: turn.challenge === i ? null : i } };
-}
-
-export function confirmChallenge(state) {
-  const { turn } = state;
-  if (turn?.phase !== 'challenge' || turn.challenge == null) return state;
-  const paid = updatePlayer(state, opponentOf(state), (p) => ({ ...p, tokens: p.tokens - 1 }));
-  return reveal(paid);
-}
-
-export function declineChallenge(state) {
-  if (state.turn?.phase !== 'challenge') return state;
-  return reveal({ ...state, turn: { ...state.turn, challenge: null } });
-}
-
-function reveal(state) {
   const { turn, current } = state;
-  const opp = opponentOf(state);
-  const year = yearOf(turn.songId);
-  const timeline = state.players[current].timeline;
-  const correct = fits(timeline, turn.place, year);
-  const challengeCorrect = turn.challenge != null && fits(timeline, turn.challenge, year);
+  if (turn?.phase !== 'listen' || turn.place == null) return state;
+  const correct = fits(state.players[current].timeline, turn.place, yearOf(turn.songId));
+  const next = correct
+    ? updatePlayer(state, current, (p) => {
+        const tl = [...p.timeline];
+        tl.splice(turn.place, 0, turn.songId);
+        return { ...p, timeline: tl };
+      })
+    : state;
+  return checkWinner({ ...next, turn: { ...turn, phase: 'reveal', result: correct ? 'correct' : 'wrong' } });
+}
 
-  let next = state;
-  let outcome;
-  if (correct) {
-    next = updatePlayer(next, current, (p) => {
-      const tl = [...p.timeline];
-      tl.splice(turn.place, 0, turn.songId);
-      return { ...p, timeline: tl };
-    });
-    outcome = turn.challenge != null ? 'correct-challenge-failed' : 'correct';
-  } else if (challengeCorrect) {
-    next = updatePlayer(next, opp, (p) => ({ ...p, timeline: insertSorted(p.timeline, turn.songId) }));
-    outcome = 'stolen';
-  } else {
-    outcome = 'wrong';
-  }
-  return checkWinner({ ...next, turn: { ...turn, phase: 'reveal', result: outcome } });
+export function pickSteal(state, cardId) {
+  const { turn } = state;
+  if (turn?.phase !== 'steal' || !state.players[opponentOf(state)].timeline.includes(cardId)) return state;
+  return { ...state, turn: { ...turn, stealPick: turn.stealPick === cardId ? null : cardId } };
+}
+
+export function confirmSteal(state) {
+  const { turn, current } = state;
+  if (turn?.phase !== 'steal' || turn.stealPick == null || !canSteal(state)) return state;
+  const card = turn.stealPick;
+  let next = updatePlayer(state, opponentOf(state), (p) => ({ ...p, timeline: p.timeline.filter((id) => id !== card) }));
+  next = updatePlayer(next, current, (p) => ({
+    ...p,
+    tokens: p.tokens - STEAL_COST,
+    timeline: insertSorted(p.timeline, card),
+  }));
+  return checkWinner({ ...next, turn: { ...turn, phase: 'listen', stolen: card } });
+}
+
+export function declineSteal(state) {
+  if (state.turn?.phase !== 'steal') return state;
+  return { ...state, turn: { ...state.turn, phase: 'listen', stealPick: null } };
 }
 
 function checkWinner(state) {
@@ -152,39 +140,19 @@ function checkWinner(state) {
   return winner == null ? state : { ...state, winner };
 }
 
+// Naming artist + title earns a token regardless of whether the placement was right.
 export function toggleNamed(state) {
   const { turn, current } = state;
   if (turn?.phase !== 'reveal') return state;
   const named = !turn.named;
-  const delta = named ? 1 : -1;
-  const player = state.players[current];
-  if (named && player.tokens >= MAX_TOKENS) return state;
-  const next = updatePlayer(state, current, (p) => ({ ...p, tokens: p.tokens + delta }));
+  const next = updatePlayer(state, current, (p) => ({ ...p, tokens: p.tokens + (named ? 1 : -1) }));
   return { ...next, turn: { ...turn, named } };
-}
-
-export function skipSong(state) {
-  const { turn, current } = state;
-  if (turn?.phase !== 'listen' || state.players[current].tokens < SKIP_COST) return state;
-  const paid = updatePlayer(state, current, (p) => ({ ...p, tokens: p.tokens - SKIP_COST }));
-  return startTurn({ ...paid, turnNumber: paid.turnNumber - 1 });
 }
 
 // Free swap for when a song can't be played (e.g. not available on Spotify).
 export function replaceSong(state) {
   if (state.turn?.phase !== 'listen') return state;
-  return startTurn({ ...state, turnNumber: state.turnNumber - 1 });
-}
-
-export function buyCard(state) {
-  const { turn, current } = state;
-  if (turn?.phase !== 'listen' || state.players[current].tokens < BUY_COST) return state;
-  const next = updatePlayer(state, current, (p) => ({
-    ...p,
-    tokens: p.tokens - BUY_COST,
-    timeline: insertSorted(p.timeline, turn.songId),
-  }));
-  return checkWinner({ ...next, turn: { ...turn, phase: 'reveal', result: 'bought', place: null, challenge: null } });
+  return startTurn({ ...state, turnNumber: state.turnNumber - 1 }, { offerSteal: false });
 }
 
 export function nextTurn(state) {

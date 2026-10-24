@@ -418,6 +418,29 @@ code.copy.copied::after { content: '  ✓ copied'; color: var(--spotify); }
 .ghost-label { font-size: calc(var(--card-w) * 0.1); font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes pulse { 50% { transform: scale(1.04); } }
 
+.pick {
+  font: inherit;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.pick:hover { transform: translateY(-4px); }
+.pick.picked { transform: translateY(-8px) scale(1.06); }
+.pick.picked.p0 { outline: 4px solid var(--p0); outline-offset: 3px; }
+.pick.picked.p1 { outline: 4px solid var(--p1); outline-offset: 3px; }
+.row.stealable { opacity: 1; border-color: var(--gold); }
+.steal-ready {
+  margin: 0 0.4rem;
+  padding: 0.1em 0.6em;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #1b1030;
+  background: var(--gold);
+}
 .card.new { animation: pop 0.7s ease; outline: 4px solid var(--good); outline-offset: 3px; }
 .card.marker { outline-offset: 3px; }
 .card.marker.wrong { outline: 4px solid var(--bad); filter: grayscale(0.7) brightness(0.8); }

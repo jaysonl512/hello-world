@@ -4,7 +4,7 @@ import * as S from './spotify.js';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
-const SETUP_KEY = 'hitster.setup';
+const SETUP_KEY = 'hitster.setup.v2';
 
 const load = (k, f) => {
   try {
@@ -28,7 +28,7 @@ const esc = (s) =>
 const ui = {
   screen: 'setup',
   game: null,
-  setup: load(SETUP_KEY, { names: ['Player 1', 'Player 2'], target: 10, startTokens: 2, decades: [...DECADES] }),
+  setup: load(SETUP_KEY, { names: ['Player 1', 'Player 2'], target: 10, startTokens: 0, decades: [...DECADES] }),
   spotify: { connected: S.isLoggedIn(), profile: null, devices: [], error: null, busy: false },
   music: { songId: null, status: 'off', error: null },
   modal: null, // 'settings' | 'rules'
@@ -37,14 +37,16 @@ const ui = {
 };
 
 const saved = load(SAVE_KEY, null);
-if (saved?.version === 1 && saved.turn && saved.winner == null) ui.savedGame = saved;
+if (saved?.version === 2 && saved.turn && saved.winner == null) ui.savedGame = saved;
 
 function setGame(next) {
-  const prevSong = ui.game?.turn?.songId;
+  const prev = ui.game?.turn;
   ui.game = next;
   store(SAVE_KEY, next);
   render();
-  if (next?.turn && next.turn.songId !== prevSong && next.turn.phase === 'listen') playCurrent();
+  // Start the song whenever a turn enters 'listen' (new song, or right after the steal step).
+  const t = next?.turn;
+  if (t?.phase === 'listen' && (t.songId !== prev?.songId || prev?.phase !== 'listen')) playCurrent();
 }
 
 // ---------- Music ----------
@@ -81,7 +83,7 @@ function prefetchNext() {
 
 async function togglePause() {
   const m = ui.music;
-  if (!spotifyOn() || !ui.game?.turn) return;
+  if (!spotifyOn() || !ui.game?.turn || ui.game.turn.phase === 'steal') return;
   try {
     if (m.status === 'playing') {
       await S.pause();
@@ -179,37 +181,26 @@ function timelineRow(pi, { plain = false } = {}) {
           parts.push(slot('place', i, pi));
           slots++;
         }
-      } else if (t.phase === 'challenge') {
-        if (i === t.place) {
-          parts.push(ghost(pi, g.players[pi].name));
-          extra++;
-        } else if (i === t.challenge) {
-          parts.push(ghost(opp, g.players[opp].name));
-          extra++;
-        } else {
-          parts.push(slot('challenge', i, opp));
-          slots++;
-        }
-      } else if (t.phase === 'reveal' && (t.result === 'wrong' || t.result === 'stolen')) {
-        if (i === t.place) {
-          parts.push(card(t.songId, { cls: 'wrong marker' }));
-          extra++;
-        }
-        if (i === t.challenge) {
-          parts.push(card(t.songId, { cls: `${t.result === 'stolen' ? 'right' : 'wrong'} marker ${PLAYER_CLASS[opp]}` }));
-          extra++;
-        }
+      } else if (t.phase === 'reveal' && t.result === 'wrong' && i === t.place) {
+        parts.push(card(t.songId, { cls: 'wrong marker' }));
+        extra++;
       }
     }
     if (i < n) {
       const id = p.timeline[i];
-      const isNew = t?.phase === 'reveal' && id === t.songId;
-      parts.push(card(id, { cls: isNew ? 'new' : '' }));
+      if (t?.phase === 'steal' && pi === opp) {
+        // Opponent's cards are pickable during the steal step.
+        const picked = id === t.stealPick ? `picked ${PLAYER_CLASS[g.current]}` : '';
+        parts.push(`<button class="pick ${picked}" data-action="steal-pick" data-id="${esc(id)}">${card(id)}</button>`);
+      } else {
+        const isNew = (t?.phase === 'reveal' && id === t.songId) || (t?.phase !== 'steal' && id === t?.stolen);
+        parts.push(card(id, { cls: isNew ? 'new' : '' }));
+      }
     }
   }
 
   return `
-    <section class="row ${PLAYER_CLASS[pi]} ${isActive ? 'active' : ''}" style="--n:${n + extra};--slots:${slots}">
+    <section class="row ${PLAYER_CLASS[pi]} ${isActive ? 'active' : ''} ${t?.phase === 'steal' && pi === opp ? 'stealable' : ''}" style="--n:${n + extra};--slots:${slots}">
       <div class="row-label">
         <span class="row-name">${esc(p.name)}</span>
         <span class="row-count">${n}/${g.settings.target}</span>
@@ -223,12 +214,13 @@ function scorePanel(pi) {
   const p = g.players[pi];
   const pips = Array.from({ length: g.settings.target }, (_, i) => `<i class="${i < p.timeline.length ? 'on' : ''}"></i>`).join('');
   const coins = p.tokens ? Array.from({ length: p.tokens }, () => '<b class="coin">★</b>').join('') : '<span class="muted">no tokens</span>';
+  const ready = p.tokens >= G.STEAL_COST ? '<span class="steal-ready">steal ready</span>' : '';
   return `
     <div class="score ${PLAYER_CLASS[pi]} ${g.current === pi && g.winner == null ? 'turn' : ''}">
       <div class="score-name">${esc(p.name)}</div>
       <div class="score-cards"><span class="big">${p.timeline.length}</span> / ${g.settings.target} cards</div>
       <div class="pips">${pips}</div>
-      <div class="coins">${coins}</div>
+      <div class="coins">${coins}${ready}</div>
     </div>`;
 }
 
@@ -258,10 +250,7 @@ function musicBar() {
 
 const RESULT_TEXT = {
   correct: (a) => `✅ Nailed it! ${a} keeps the card.`,
-  'correct-challenge-failed': (a, o) => `✅ ${a} was right, so ${o}'s challenge fails.`,
-  stolen: (a, o) => `🏴‍☠️ Stolen! ${a} missed it and ${o} takes the card.`,
-  wrong: (a) => `❌ Not quite. The card is discarded.`,
-  bought: (a) => `🪙 ${a} cashed in 3 tokens for the card.`,
+  wrong: () => `❌ Not quite. The card is discarded.`,
 };
 
 function stage() {
@@ -275,8 +264,6 @@ function stage() {
   if (t.phase === 'reveal') {
     const animate = ui.animatedTurn !== g.turnNumber;
     ui.animatedTurn = g.turnNumber;
-    const canName = t.result !== 'bought';
-    const atMax = a.tokens >= G.MAX_TOKENS && !t.named;
     return `
       <div class="stage">
         <div class="flip ${animate ? 'animate' : 'done'}">
@@ -286,13 +273,9 @@ function stage() {
         <div class="stage-info">
           <div class="turn-label ${pc}">Turn ${g.turnNumber} · ${esc(a.name)}</div>
           <h2 class="result ${t.result}">${RESULT_TEXT[t.result](esc(a.name), esc(o.name))}</h2>
-          ${
-            canName
-              ? `<button class="btn toggle ${t.named ? 'on' : ''}" data-action="named" ${atMax ? 'disabled' : ''}>
-                  ${t.named ? '★ Named it! +1 token' : `Did ${esc(a.name)} name the artist <u>and</u> title? +1 ★`}
-                </button>`
-              : ''
-          }
+          <button class="btn toggle ${t.named ? 'on' : ''}" data-action="named">
+            ${t.named ? '★ Named it! +1 token' : `Did ${esc(a.name)} name the artist <u>and</u> title? +1 ★`}
+          </button>
           <div class="actions">
             ${
               g.winner != null
@@ -311,18 +294,16 @@ function stage() {
     heading = `<div class="turn-label ${pc}">Turn ${g.turnNumber} · ${esc(a.name)}</div><h2>Where does this song go?</h2>`;
     body = `<p class="hint">${
       t.place == null ? `Tap a <b>+</b> in ${esc(a.name)}'s timeline.` : 'Happy with that spot? Lock it in.'
-    } Shout the artist &amp; title for a bonus ★.</p>`;
-    actions = `
-      <button class="btn primary" data-action="lock" ${t.place == null ? 'disabled' : ''}>Lock it in</button>
-      <button class="btn" data-action="skip" ${a.tokens < G.SKIP_COST ? 'disabled' : ''}>Skip song (−1 ★)</button>
-      <button class="btn" data-action="buy" ${a.tokens < G.BUY_COST ? 'disabled' : ''}>Buy card (−3 ★)</button>`;
+    } Name the artist &amp; title for +1 ★.</p>`;
+    actions = `<button class="btn primary" data-action="lock" ${t.place == null ? 'disabled' : ''}>Lock it in</button>`;
   } else {
-    const opc = PLAYER_CLASS[oi];
-    heading = `<div class="turn-label ${opc}">Challenge · ${esc(o.name)}</div><h2>${esc(o.name)}, do you trust it?</h2>`;
-    body = `<p class="hint">Spend 1 ★ and pick a <b>different</b> spot. If ${esc(a.name)} is wrong and you're right, you steal the card.</p>`;
+    heading = `<div class="turn-label ${pc}">Turn ${g.turnNumber} · ${esc(a.name)}</div><h2>${esc(a.name)}, steal a card?</h2>`;
+    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${esc(o.name)}'s timeline${
+      t.stealPick ? '.' : `. Tap the one you want.`
+    } The song plays after this.</p>`;
     actions = `
-      <button class="btn primary ${opc}" data-action="confirm-challenge" ${t.challenge == null ? 'disabled' : ''}>Challenge! (−1 ★)</button>
-      <button class="btn" data-action="decline-challenge">No challenge, reveal it</button>`;
+      <button class="btn primary ${pc}" data-action="confirm-steal" ${t.stealPick == null ? 'disabled' : ''}>Steal it (−${G.STEAL_COST} ★)</button>
+      <button class="btn" data-action="decline-steal">Not now, play the song</button>`;
   }
   return `
     <div class="stage">
@@ -330,7 +311,7 @@ function stage() {
       <div class="stage-info">
         ${heading}${body}
         <div class="actions">${actions}</div>
-        ${musicBar()}
+        ${t.phase === 'steal' ? '' : musicBar()}
       </div>
     </div>`;
 }
@@ -392,11 +373,10 @@ function rulesHtml() {
   return `
     <h3>How to play</h3>
     <ol class="rules">
-      <li>Each player starts with one card in their timeline.</li>
+      <li>Each player starts with one card in their timeline and no tokens.</li>
       <li>On your turn a mystery song plays. Tap the <b>+</b> where you think it belongs, oldest on the left and newest on the right.</li>
-      <li>Your opponent can spend <b>1 ★</b> to <b>challenge</b> by picking a different spot. If you're wrong and they're right, they steal the card.</li>
-      <li>Name the <b>artist and title</b> before the reveal to earn <b>+1 ★</b> (max ${G.MAX_TOKENS}).</li>
-      <li>Spend <b>1 ★</b> to skip a song, or <b>3 ★</b> to take the card for free.</li>
+      <li>Name the <b>artist and title</b> to earn <b>+1 ★</b>, even if you got the year wrong.</li>
+      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from your opponent's timeline.</li>
       <li>First to the target number of cards wins!</li>
     </ol>`;
 }
@@ -560,7 +540,7 @@ const actions = {
     ui.savedGame = null;
     ui.game = null;
     setGame(g);
-    if (g.turn.phase !== 'listen') playCurrent();
+    if (g.turn.phase === 'reveal') playCurrent();
   },
   rematch() {
     ui.screen = 'game';
@@ -577,13 +557,22 @@ const actions = {
   },
   place: (el) => setGame(G.choosePlacement(ui.game, Number(el.dataset.i))),
   lock: () => setGame(G.lockPlacement(ui.game)),
-  challenge: (el) => setGame(G.chooseChallenge(ui.game, Number(el.dataset.i))),
-  'confirm-challenge': () => setGame(G.confirmChallenge(ui.game)),
-  'decline-challenge': () => setGame(G.declineChallenge(ui.game)),
+  'steal-pick': (el) => setGame(G.pickSteal(ui.game, el.dataset.id)),
+  'confirm-steal'() {
+    S.unlockAudio();
+    const next = G.confirmSteal(ui.game);
+    if (next.winner != null) {
+      ui.game = next;
+      return actions['show-winner']();
+    }
+    setGame(next);
+  },
+  'decline-steal': () => {
+    S.unlockAudio();
+    setGame(G.declineSteal(ui.game));
+  },
   named: () => setGame(G.toggleNamed(ui.game)),
-  skip: () => setGame(G.skipSong(ui.game)),
   'replace-song': () => setGame(G.replaceSong(ui.game)),
-  buy: () => setGame(G.buyCard(ui.game)),
   next: () => {
     S.unlockAudio();
     setGame(G.nextTurn(ui.game));

@@ -14,15 +14,15 @@ cards wins.
 
 ## Rules
 
-1. Each player starts with one face-up card.
+1. Each player starts with one face-up card and **no tokens**.
 2. On your turn a mystery song plays. Tap the **+** where you think it belongs in your
    timeline, oldest on the left and newest on the right. Then **Lock it in**.
-3. Your opponent may spend **1 ★** to **challenge** by picking a different spot. If you're
-   wrong and they're right, they steal the card.
-4. Name the **artist and title** before the reveal to earn **+1 ★** (max 5). The host taps the
-   button on the reveal screen.
-5. Spend **1 ★** to skip a song, or **3 ★** to take the card for free.
-6. First to the target (default 10 cards) wins.
+3. Name the **artist and title** to earn **+1 ★**, even if you got the year wrong. The host
+   taps the button on the reveal screen.
+4. At the **start of your turn, before the song plays**, you can trade **3 ★** to **steal any
+   card** you choose from your opponent's timeline. Tokens earned on a turn can only be
+   spent on a later turn.
+5. First to the target (default 10 cards) wins.
 
 ## Setup (one time, about 5 minutes)
 
