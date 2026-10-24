@@ -42,7 +42,10 @@ const save = (key, value) => {
   }
 };
 
-export const getClientId = () => load(LS.clientId, '');
+// Public PKCE client ID for this deployment (not a secret). Can be overridden from the setup screen.
+const DEFAULT_CLIENT_ID = '82a4a1f24fe24be3a70727dfd42fb01a';
+
+export const getClientId = () => load(LS.clientId, '') || DEFAULT_CLIENT_ID;
 export const setClientId = (id) => save(LS.clientId, id.trim());
 export const getDevicePreference = () => load(LS.device, SDK_DEVICE);
 export const setDevicePreference = (id) => save(LS.device, id);
