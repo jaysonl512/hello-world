@@ -17,7 +17,7 @@ const LS = {
   clientId: 'hitster.spotify.clientId',
   tokens: 'hitster.spotify.tokens',
   verifier: 'hitster.spotify.verifier',
-  trackCache: 'hitster.spotify.trackCache',
+  trackCache: 'hitster.spotify.trackCache.v2',
   device: 'hitster.spotify.device',
 };
 
@@ -202,9 +202,11 @@ export async function findTrack(song) {
   const queries = [`track:${clean(song.title)} artist:${clean(song.artist)}`, `${clean(song.title)} ${clean(song.artist)}`];
   let best = null;
   for (const q of queries) {
-    const res = await api('/search', { query: { q, type: 'track', limit: 10 } });
+    // market=from_token limits results to versions playable in the user's country.
+    const res = await api('/search', { query: { q, type: 'track', limit: 10, market: 'from_token' } });
     const items = res?.tracks?.items ?? [];
     for (const [i, track] of items.entries()) {
+      if (track.is_playable === false) continue;
       // Earlier results get a small boost: Spotify's own relevance ranking is usually right.
       const score = scoreTrack(track, song) - i * 0.2;
       if (!best || score > best.score) best = { score, uri: track.uri };
@@ -286,9 +288,9 @@ async function targetDevice() {
   throw new Error(NO_DEVICE);
 }
 
-// Returns the name of the device the song is playing on.
-export async function playTrack(uri) {
-  const { id: deviceId, name } = await targetDevice();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function sendPlay(deviceId, uri) {
   try {
     await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
   } catch (err) {
@@ -299,7 +301,31 @@ export async function playTrack(uri) {
     });
     await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
   }
-  return name;
+}
+
+// Spotify can accept a play command and then not play (e.g. the app was asleep), so for
+// Spotify Connect devices confirm the song actually started, retrying once.
+async function isPlaying(uri) {
+  const state = await api('/me/player', { query: { market: 'from_token' } }).catch(() => null);
+  const item = state?.item;
+  return !!state?.is_playing && (item?.uri === uri || item?.linked_from?.uri === uri);
+}
+
+// Returns the name of the device the song is playing on.
+export async function playTrack(uri) {
+  const { id: deviceId, name } = await targetDevice();
+  await sendPlay(deviceId, uri);
+  if (usingSdk() && deviceId === sdk.deviceId) return name;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await sleep(1500);
+    if (await isPlaying(uri)) return name;
+    if (attempt === 0) await sendPlay(deviceId, uri);
+  }
+  const err = new Error(
+    `Spotify on ${name} didn't start the song. Open the Spotify app, press play on anything, come back and tap ▶ Play.`,
+  );
+  err.notFound = true; // the track itself may be the problem, so offer a free swap
+  throw err;
 }
 
 export async function pause() {
