@@ -17,7 +17,7 @@ const LS = {
   clientId: 'hitster.spotify.clientId',
   tokens: 'hitster.spotify.tokens',
   verifier: 'hitster.spotify.verifier',
-  trackCache: 'hitster.spotify.trackCache.v2',
+  trackCache: 'hitster.spotify.trackCache.v3',
   device: 'hitster.spotify.device',
 };
 
@@ -211,7 +211,7 @@ export async function findTrack(song) {
       if (track.is_playable === false) continue;
       // Earlier results get a small boost: Spotify's own relevance ranking is usually right.
       const score = scoreTrack(track, song) - i * 0.2;
-      if (!best || score > best.score) best = { score, uri: track.uri };
+      if (!best || score > best.score) best = { score, uri: track.uri, album: track.album?.uri ?? null };
     }
     if (best && best.score >= 14) break;
   }
@@ -220,9 +220,9 @@ export async function findTrack(song) {
     err.notFound = true;
     throw err;
   }
-  trackCache[song.id] = best.uri;
+  trackCache[song.id] = { uri: best.uri, album: best.album };
   save(LS.trackCache, trackCache);
-  return best.uri;
+  return trackCache[song.id];
 }
 
 // ---------- Web Playback SDK ----------
@@ -294,16 +294,16 @@ async function targetDevice() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function sendPlay(deviceId, uri) {
+async function sendPlay(deviceId, body) {
   try {
-    await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
+    await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body });
   } catch (err) {
     if (err.status !== 404) throw err;
     // Device went idle; wake it with a transfer, then retry.
     await api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } }).catch((e) => {
       throw e.status === 404 ? new Error(NO_DEVICE) : e;
     });
-    await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body: { uris: [uri], position_ms: 0 } });
+    await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId }, body });
   }
 }
 
@@ -344,11 +344,16 @@ export const deviceLabel = (d) =>
 // Returns the name of the device the song is playing on. Sends a single play command and then
 // only watches: re-sending commands while a phone is still buffering interrupts it, so the
 // player is never nudged again here (the ▶ Play button is the manual retry).
-export async function playTrack(uri) {
+export async function playTrack({ uri, album }) {
   const { id: deviceId, name } = await targetDevice();
   lastTarget = deviceId;
-  await sendPlay(deviceId, uri);
-  if (usingSdk() && deviceId === sdk.deviceId) return name;
+  if (usingSdk() && deviceId === sdk.deviceId) {
+    await sendPlay(deviceId, { uris: [uri], position_ms: 0 });
+    return name;
+  }
+  // Spotify's phone/TV apps can reject a bare track list, but reliably play
+  // "this album, starting at this track", so Connect devices get the album form.
+  await sendPlay(deviceId, album ? { context_uri: album, offset: { uri }, position_ms: 0 } : { uris: [uri], position_ms: 0 });
   if (await waitForPlaying(uri, deviceId, 12)) return name;
   const err = new Error(
     `Spotify on ${name} didn't start the song. ${await describePlayer(uri, deviceId)} Tap ▶ Play to try again, or Swap song.`,

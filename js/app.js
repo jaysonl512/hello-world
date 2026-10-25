@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=10';
-import * as G from './game.js?v=10';
-import * as S from './spotify.js?v=10';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=11';
+import * as G from './game.js?v=11';
+import * as S from './spotify.js?v=11';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -64,9 +64,9 @@ async function playCurrent() {
   ui.music = { songId, status: 'loading', error: null };
   render();
   try {
-    const uri = await S.findTrack(G.song(songId));
+    const track = await S.findTrack(G.song(songId));
     if (ui.game?.turn?.songId !== songId) return; // turn moved on while we searched
-    const device = await S.playTrack(uri);
+    const device = await S.playTrack(track);
     ui.music = { songId, status: 'playing', error: null, device };
   } catch (err) {
     if (ui.game?.turn?.songId !== songId) return;
