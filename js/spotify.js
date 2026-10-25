@@ -307,12 +307,42 @@ async function sendPlay(deviceId, uri) {
 
 // Spotify can accept a play command and then not play (e.g. the app was asleep), so for
 // Spotify Connect devices confirm the song actually started, retrying once.
+const playerState = () => api('/me/player', { query: { market: 'from_token' } }).catch(() => null);
+const isOurSong = (state, uri) => state?.item?.uri === uri || state?.item?.linked_from?.uri === uri;
+
 async function isPlaying(uri, deviceId) {
-  const state = await api('/me/player', { query: { market: 'from_token' } }).catch(() => null);
-  const item = state?.item;
-  return (
-    !!state?.is_playing && state.device?.id === deviceId && (item?.uri === uri || item?.linked_from?.uri === uri)
-  );
+  const state = await playerState();
+  return !!state?.is_playing && state.device?.id === deviceId && isOurSong(state, uri);
+}
+
+async function waitForPlaying(uri, deviceId, seconds) {
+  for (let i = 0; i < seconds; i++) {
+    await sleep(1000);
+    if (await isPlaying(uri, deviceId)) return true;
+  }
+  return false;
+}
+
+// Fallback for phones: an iPhone app in the background may refuse to load a new song but will
+// still skip tracks, so queue the song and skip to it, then nudge play if it is left paused.
+async function queueAndSkip(deviceId, uri) {
+  await api('/me/player/queue', { method: 'POST', query: { uri, device_id: deviceId } });
+  await api('/me/player/next', { method: 'POST', query: { device_id: deviceId } });
+  if (await waitForPlaying(uri, deviceId, 3)) return true;
+  const state = await playerState();
+  if (state?.device?.id === deviceId && isOurSong(state, uri) && !state.is_playing) {
+    await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId } }).catch(() => {});
+    return waitForPlaying(uri, deviceId, 3);
+  }
+  return false;
+}
+
+// Short description of what Spotify reports, without revealing the song title.
+async function describePlayer(uri) {
+  const state = await playerState();
+  if (!state?.device) return 'Spotify reports no active device.';
+  const what = state.item ? (isOurSong(state, uri) ? 'this song' : 'a different song') : 'nothing';
+  return `Spotify reports: ${state.is_playing ? 'playing' : 'paused'} on ${state.device.name}, ${what} loaded.`;
 }
 
 // Returns the name of the device the song is playing on. A phone app waking up from the
@@ -321,13 +351,12 @@ export async function playTrack(uri) {
   const { id: deviceId, name } = await targetDevice();
   await sendPlay(deviceId, uri);
   if (usingSdk() && deviceId === sdk.deviceId) return name;
-  for (let attempt = 1; attempt <= 8; attempt++) {
-    await sleep(1000);
-    if (await isPlaying(uri, deviceId)) return name;
-    if (attempt === 4) await sendPlay(deviceId, uri);
-  }
+  if (await waitForPlaying(uri, deviceId, 4)) return name;
+  if (await queueAndSkip(deviceId, uri).catch(() => false)) return name;
+  await sendPlay(deviceId, uri);
+  if (await waitForPlaying(uri, deviceId, 4)) return name;
   const err = new Error(
-    `Spotify on ${name} didn't start the song. Tap Open Spotify, play any song for a second, come back and tap ▶ Play.`,
+    `Spotify on ${name} didn't start the song. ${await describePlayer(uri)} Tap Open Spotify, play any song, come back and tap ▶ Play.`,
   );
   err.notFound = true; // the track itself may be the problem, so offer a free swap
   throw err;
