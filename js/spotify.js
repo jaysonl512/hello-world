@@ -18,19 +18,18 @@ const LS = {
   tokens: 'hitster.spotify.tokens',
   verifier: 'hitster.spotify.verifier',
   trackCache: 'hitster.spotify.trackCache.v3',
-  device: 'hitster.spotify.device',
 };
 
-// The default device choice: this browser tab on desktop, or this phone's Spotify app on phones.
-export const SDK_DEVICE = 'sdk';
-
+// Music always plays on the device the game is open on: this browser tab on desktop (via the
+// Web Playback SDK), or this phone's Spotify app on phones. Where the sound goes from there is
+// up to the device (AirPlay, Bluetooth, casting the tab), never chosen by the game.
 // Spotify's Web Playback SDK only supports desktop browsers.
 export const browserPlaybackSupported = !(
   /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 );
 
-export const usingSdk = () => browserPlaybackSupported && getDevicePreference() === SDK_DEVICE;
+export const usingSdk = () => browserPlaybackSupported;
 
 const NO_DEVICE =
   'No Spotify device found. Open the Spotify app (on this phone or your TV), play any song for a second, then tap ▶ Play.';
@@ -61,8 +60,6 @@ const DEFAULT_CLIENT_ID = '82a4a1f24fe24be3a70727dfd42fb01a';
 
 export const getClientId = () => load(LS.clientId, '') || DEFAULT_CLIENT_ID;
 export const setClientId = (id) => save(LS.clientId, id.trim());
-export const getDevicePreference = () => load(LS.device, SDK_DEVICE);
-export const setDevicePreference = (id) => save(LS.device, id);
 export const isLoggedIn = () => !!load(LS.tokens, null);
 
 export function logout() {
@@ -216,7 +213,8 @@ export async function findTrack(song) {
     if (best && best.score >= 14) break;
   }
   if (!best || best.score < 5) {
-    const err = new Error(`Couldn't find "${song.title}" by ${song.artist} on Spotify.`);
+    // Don't name the song: the message is on screen while everyone is guessing.
+    const err = new Error("Couldn't find this song on Spotify. Tap Swap song for another one.");
     err.notFound = true;
     throw err;
   }
@@ -274,16 +272,10 @@ export function unlockAudio() {
   sdk.player?.activateElement?.();
 }
 
-// Resolves the device to play on: the chosen device if Spotify lists it, otherwise the default
-// (this browser on desktop, this phone's Spotify app on phones). Never silently switches to
-// some other device like a TV.
+// Resolves the device to play on: this browser on desktop, this phone's Spotify app on phones.
 async function targetDevice() {
   if (usingSdk()) return { id: await initPlayer(), name: 'this browser' };
-  const pref = getDevicePreference();
-  const devices = (await getDevices()).filter((d) => !d.is_restricted && d.name !== 'Hitster TV');
-  const chosen = pref !== SDK_DEVICE && devices.find((d) => d.id === pref);
-  if (chosen) return chosen;
-  if (browserPlaybackSupported) return { id: await initPlayer(), name: 'this browser' };
+  const devices = (await getDevices()).filter((d) => !d.is_restricted);
   const phones = devices.filter((d) => d.type === 'Smartphone');
   // Spotify can list stale duplicate entries for the same phone; prefer the one it says is in use.
   const current = phones.length > 1 ? (await playerState())?.device : null;
@@ -307,8 +299,8 @@ async function sendPlay(deviceId, body) {
   }
 }
 
-// Spotify can accept a play command and then not play (e.g. the app was asleep), so for
-// Spotify Connect devices confirm the song actually started, retrying once.
+// Spotify can accept a play command and then not play (e.g. the app was asleep), so on phones
+// the game confirms the song actually started.
 const playerState = () => api('/me/player', { query: { market: 'from_token' } }).catch(() => null);
 const isOurSong = (state, uri) => state?.item?.uri === uri || state?.item?.linked_from?.uri === uri;
 
@@ -336,23 +328,17 @@ async function describePlayer(uri, deviceId) {
   return `Spotify reports: ${state.is_playing ? 'playing' : 'paused'} on ${state.device.name} (${same}), ${what} loaded.`;
 }
 
-// Last device a song was sent to, shown in settings for troubleshooting.
-export let lastTarget = null;
-export const deviceLabel = (d) =>
-  `${d.name} · ${d.type}${d.is_active ? ' · active' : ''}${d.is_restricted ? ' · restricted' : ''} · ${shortId(d.id)}`;
-
 // Returns the name of the device the song is playing on. Sends a single play command and then
 // only watches: re-sending commands while a phone is still buffering interrupts it, so the
 // player is never nudged again here (the ▶ Play button is the manual retry).
 export async function playTrack({ uri, album }) {
   const { id: deviceId, name } = await targetDevice();
-  lastTarget = deviceId;
   if (usingSdk() && deviceId === sdk.deviceId) {
     await sendPlay(deviceId, { uris: [uri], position_ms: 0 });
     return name;
   }
-  // Spotify's phone/TV apps can reject a bare track list, but reliably play
-  // "this album, starting at this track", so Connect devices get the album form.
+  // The phone's Spotify app can reject a bare track list, but reliably plays
+  // "this album, starting at this track", so it gets the album form.
   await sendPlay(deviceId, album ? { context_uri: album, offset: { uri }, position_ms: 0 } : { uris: [uri], position_ms: 0 });
   if (await waitForPlaying(uri, deviceId, 12)) return name;
   const err = new Error(

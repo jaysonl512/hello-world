@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=11';
-import * as G from './game.js?v=11';
-import * as S from './spotify.js?v=11';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=12';
+import * as G from './game.js?v=12';
+import * as S from './spotify.js?v=12';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -29,7 +29,7 @@ const ui = {
   screen: 'setup',
   game: null,
   setup: load(SETUP_KEY, { names: ['Player 1', 'Player 2'], target: 10, startTokens: 0, decades: [...DECADES] }),
-  spotify: { connected: S.isLoggedIn(), profile: null, devices: [], error: null, busy: false },
+  spotify: { connected: S.isLoggedIn(), profile: null, error: null, busy: false },
   music: { songId: null, status: 'off', error: null },
   modal: null, // 'settings' | 'rules'
   setupError: null,
@@ -118,13 +118,13 @@ function onPlayerError(err) {
 
 async function refreshSpotify() {
   if (!S.isLoggedIn()) {
-    ui.spotify = { ...ui.spotify, connected: false, profile: null, devices: [] };
+    ui.spotify = { ...ui.spotify, connected: false, profile: null };
     return render();
   }
   ui.spotify.connected = true;
   try {
-    const [profile, devices] = await Promise.all([S.getProfile(), S.getDevices()]);
-    ui.spotify = { ...ui.spotify, profile, devices, error: null };
+    const profile = await S.getProfile();
+    ui.spotify = { ...ui.spotify, profile, error: null };
     if (profile.product !== 'premium') {
       ui.spotify.error = 'Spotify Premium is required to control playback. You can still play in silent mode.';
     } else if (S.usingSdk()) {
@@ -340,43 +340,16 @@ function spotifyPanel() {
         ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
       </div>`;
   }
-  // On phones "This phone" already means the phone's Spotify app, so phones aren't listed again.
-  const isPhone = (d) => !S.browserPlaybackSupported && d.type === 'Smartphone';
-  if (sp.devices.some((d) => d.id === S.getDevicePreference() && isPhone(d))) S.setDevicePreference(S.SDK_DEVICE);
-  const pref = S.getDevicePreference();
-  const options = [
-    `<option value="${S.SDK_DEVICE}" ${pref === S.SDK_DEVICE ? 'selected' : ''}>${
-      S.browserPlaybackSupported ? 'This browser tab (cast the tab to your TV)' : 'This phone (Spotify app)'
-    }</option>`,
-    ...sp.devices
-      .filter((d) => d.name !== 'Hitster TV' && !isPhone(d))
-      .map((d) => `<option value="${esc(d.id)}" ${pref === d.id ? 'selected' : ''}>${esc(d.name)} (${esc(d.type)})</option>`),
-  ];
-  if (pref !== S.SDK_DEVICE && !sp.devices.some((d) => d.id === pref)) {
-    options.push(`<option value="${esc(pref)}" selected>Last used device (offline?)</option>`);
-  }
   return `
     <div class="panel spotify">
       <h3><span class="sp-logo">●</span> Spotify connected</h3>
       <p>${sp.profile ? `Signed in as <b>${esc(sp.profile.display_name || sp.profile.id)}</b>` : 'Signed in'}</p>
-      <label class="field">Play music on
-        <div class="inline">
-          <select id="device">${options.join('')}</select>
-          <button class="btn small" data-action="refresh-devices" title="Refresh devices">↻</button>
-        </div>
-      </label>
       <p class="hint small">${
         S.browserPlaybackSupported
-          ? "Tip: open Spotify on your TV or speaker first and it'll show up here."
-          : 'On a phone, music plays through the Spotify app. Open Spotify (on this phone or your TV) and play any song for a second so it shows up here.'
+          ? 'Music plays in this browser tab. To play on a TV, cast the tab. For a speaker, pick it as your computer\'s sound output.'
+          : "Music plays through Spotify on this phone. To hear it on a speaker or TV, pick it with AirPlay or Bluetooth, not Spotify's own device list."
       }</p>
       ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
-      <details class="devices">
-        <summary>Devices Spotify sees (${sp.devices.length})</summary>
-        <ul>${sp.devices
-          .map((d) => `<li>${esc(S.deviceLabel(d))}${d.id === S.lastTarget ? ' ← last song sent here' : ''}</li>`)
-          .join('') || '<li>None. Open the Spotify app and tap ↻.</li>'}</ul>
-      </details>
       <button class="btn small ghost-btn" data-action="disconnect">Disconnect</button>
     </div>`;
 }
@@ -646,11 +619,10 @@ const actions = {
   },
   disconnect() {
     S.logout();
-    ui.spotify = { connected: false, profile: null, devices: [], error: null };
+    ui.spotify = { connected: false, profile: null, error: null };
     ui.music = { songId: null, status: 'off', error: null };
     render();
   },
-  'refresh-devices': () => refreshSpotify(),
   async copy(el) {
     try {
       await navigator.clipboard.writeText(el.dataset.text);
@@ -668,11 +640,7 @@ app.addEventListener('click', (e) => {
 });
 
 app.addEventListener('change', (e) => {
-  if (e.target.id === 'device') {
-    S.setDevicePreference(e.target.value);
-    if (S.usingSdk()) S.initPlayer({ onState: onPlayerState, onError: onPlayerError }).catch(onPlayerError);
-    if (ui.game?.turn && ui.music.status !== 'off') playCurrent();
-  } else if (['name0', 'name1', 'target', 'tokens'].includes(e.target.id)) {
+  if (['name0', 'name1', 'target', 'tokens'].includes(e.target.id)) {
     readSetupForm();
   }
 });

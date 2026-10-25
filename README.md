@@ -57,14 +57,18 @@ to do this once per browser.
 
 ## Playing on the TV
 
-**Option A: cast the tab (simplest).** In Chrome, open the ⋮ menu, choose **Cast…**, and pick
-your TV (Chromecast / Google TV / Android TV), using *Sources → Cast tab*. Leave
-*Play music on* set to **This browser tab** so the audio goes to the TV with the picture.
-Click ⛶ for fullscreen. You run the game from the laptop and everyone watches the TV.
+Music always plays on the device the game is open on. Choose where the sound goes on that
+device, not in the game.
 
-**Option B: TV runs Spotify.** If your TV has the Spotify app, open it, then in the game
-choose ⚙ → *Play music on* → your TV. Cast or HDMI the game screen however you like. The music
-plays from the TV's Spotify app.
+**From a phone (iPhone or Android).** Songs play through the Spotify app on the phone, so keep
+Spotify open in the background. Mirror the screen to the TV (iPhone: Control Center → Screen
+Mirroring). To hear the music on a speaker or TV, pick it with **AirPlay or Bluetooth**. Don't use
+Spotify's own device list: speakers like Sonos block outside apps there, and the next song comes
+back to the phone anyway.
+
+**From a laptop.** In Chrome, open the ⋮ menu, choose **Cast…**, pick your TV (Chromecast /
+Google TV / Android TV), and use *Sources → Cast tab*. The music plays in the tab, so it goes
+to the TV with the picture. Click ⛶ for fullscreen.
 
 Keyboard: **Space** pauses or resumes the song.
 
