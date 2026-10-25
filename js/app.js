@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=13';
-import * as G from './game.js?v=13';
-import * as S from './spotify.js?v=13';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=14';
+import * as G from './game.js?v=14';
+import * as S from './spotify.js?v=14';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -413,7 +413,7 @@ function setupScreen() {
           </div>
           <div class="two">
             <label class="field">Cards to win
-              <select id="target">${[5, 8, 10, 12, 15].map((n) => `<option ${n === s.target ? 'selected' : ''}>${n}</option>`).join('')}</select>
+              <select id="target">${[5, 8, 10, 12, 15, 20, 25, 30].map((n) => `<option ${n === s.target ? 'selected' : ''}>${n}</option>`).join('')}</select>
             </label>
             <label class="field">Starting ★ tokens
               <select id="tokens">${[0, 1, 2, 3, 4, 5].map((n) => `<option ${n === s.startTokens ? 'selected' : ''}>${n}</option>`).join('')}</select>
