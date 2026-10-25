@@ -9,7 +9,7 @@
 //    card from your opponent's timeline.
 //  - First to the target number of cards wins.
 
-import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=9';
+import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=10';
 
 export const STEAL_COST = 3;
 

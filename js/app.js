@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=9';
-import * as G from './game.js?v=9';
-import * as S from './spotify.js?v=9';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=10';
+import * as G from './game.js?v=10';
+import * as S from './spotify.js?v=10';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -371,6 +371,12 @@ function spotifyPanel() {
           : 'On a phone, music plays through the Spotify app. Open Spotify (on this phone or your TV) and play any song for a second so it shows up here.'
       }</p>
       ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
+      <details class="devices">
+        <summary>Devices Spotify sees (${sp.devices.length})</summary>
+        <ul>${sp.devices
+          .map((d) => `<li>${esc(S.deviceLabel(d))}${d.id === S.lastTarget ? ' ← last song sent here' : ''}</li>`)
+          .join('') || '<li>None. Open the Spotify app and tap ↻.</li>'}</ul>
+      </details>
       <button class="btn small ghost-btn" data-action="disconnect">Disconnect</button>
     </div>`;
 }

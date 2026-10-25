@@ -285,7 +285,9 @@ async function targetDevice() {
   if (chosen) return chosen;
   if (browserPlaybackSupported) return { id: await initPlayer(), name: 'this browser' };
   const phones = devices.filter((d) => d.type === 'Smartphone');
-  const phone = phones.find((d) => d.is_active) ?? phones[0];
+  // Spotify can list stale duplicate entries for the same phone; prefer the one it says is in use.
+  const current = phones.length > 1 ? (await playerState())?.device : null;
+  const phone = phones.find((d) => d.id === current?.id) ?? phones.find((d) => d.is_active) ?? phones[0];
   if (phone) return phone;
   throw new Error(NO_PHONE);
 }
@@ -324,23 +326,32 @@ async function waitForPlaying(uri, deviceId, seconds) {
 }
 
 // Short description of what Spotify reports, without revealing the song title.
-async function describePlayer(uri) {
+const shortId = (id) => (id ? `…${id.slice(-4)}` : '?');
+
+async function describePlayer(uri, deviceId) {
   const state = await playerState();
-  if (!state?.device) return 'Spotify reports no active device.';
+  if (!state?.device) return `Spotify reports no active device (sent to ${shortId(deviceId)}).`;
   const what = state.item ? (isOurSong(state, uri) ? 'this song' : 'a different song') : 'nothing';
-  return `Spotify reports: ${state.is_playing ? 'playing' : 'paused'} on ${state.device.name}, ${what} loaded.`;
+  const same = state.device.id === deviceId ? 'same device' : `sent to ${shortId(deviceId)}, reported ${shortId(state.device.id)}`;
+  return `Spotify reports: ${state.is_playing ? 'playing' : 'paused'} on ${state.device.name} (${same}), ${what} loaded.`;
 }
+
+// Last device a song was sent to, shown in settings for troubleshooting.
+export let lastTarget = null;
+export const deviceLabel = (d) =>
+  `${d.name} · ${d.type}${d.is_active ? ' · active' : ''}${d.is_restricted ? ' · restricted' : ''} · ${shortId(d.id)}`;
 
 // Returns the name of the device the song is playing on. Sends a single play command and then
 // only watches: re-sending commands while a phone is still buffering interrupts it, so the
 // player is never nudged again here (the ▶ Play button is the manual retry).
 export async function playTrack(uri) {
   const { id: deviceId, name } = await targetDevice();
+  lastTarget = deviceId;
   await sendPlay(deviceId, uri);
   if (usingSdk() && deviceId === sdk.deviceId) return name;
   if (await waitForPlaying(uri, deviceId, 12)) return name;
   const err = new Error(
-    `Spotify on ${name} didn't start the song. ${await describePlayer(uri)} Tap ▶ Play to try again, or Swap song.`,
+    `Spotify on ${name} didn't start the song. ${await describePlayer(uri, deviceId)} Tap ▶ Play to try again, or Swap song.`,
   );
   err.notFound = true; // the track itself may be the problem, so offer a free swap
   throw err;
