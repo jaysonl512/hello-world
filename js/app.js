@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=15';
-import * as G from './game.js?v=15';
-import * as S from './spotify.js?v=15';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=18';
+import * as G from './game.js?v=18';
+import * as S from './spotify.js?v=18';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -146,6 +146,18 @@ async function refreshSpotify() {
 const decadeClass = (year) => `d${Math.max(1950, decadeOf(year))}`;
 const decadeLabel = (d) => `${String(d).slice(2)}s`;
 const PLAYER_CLASS = ['p0', 'p1'];
+const dot = (pi) => `<i class="dot ${PLAYER_CLASS[pi]}"></i>`;
+const logo = (cls = '') => `<div class="logo ${cls}">HIT<span>LINE</span></div>`;
+const ICON = {
+  play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.8" width="3" height="10.4" rx="1" fill="currentColor"/><rect x="9.5" y="2.8" width="3" height="10.4" rx="1" fill="currentColor"/></svg>',
+  restart:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.4 1.8v3h3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+// "Jay's turn · Round 2": a round is one turn for each player.
+const turnLabel = (g) =>
+  `<div class="eyebrow">${dot(g.current)}${esc(g.players[g.current].name)}’s turn · Round ${Math.ceil(g.turnNumber / 2)}</div>`;
 
 function card(id, { cls = '' } = {}) {
   const s = G.song(id);
@@ -157,12 +169,16 @@ function card(id, { cls = '' } = {}) {
     </div>`;
 }
 
-function ghost(playerIdx, label) {
-  return `<div class="card ghost ${PLAYER_CLASS[playerIdx]}"><span class="ghost-q">?</span><span class="ghost-label">${esc(label)}</span></div>`;
+// The chosen spot in the timeline, before the answer is revealed.
+function ghost() {
+  return `<div class="card ghost"><span class="ghost-q">?</span><span class="ghost-label">Place here</span></div>`;
 }
 
-const slot = (action, i, playerIdx) =>
-  `<button class="slot ${PLAYER_CLASS[playerIdx]}" data-action="${action}" data-i="${i}" aria-label="Place here">+</button>`;
+const slot = (action, i) => `<button class="slot" data-action="${action}" data-i="${i}" aria-label="Place the song here">+</button>`;
+
+function vinyl({ spin = false, cls = '' } = {}) {
+  return `<div class="vinyl ${spin ? 'spin' : ''} ${cls}"><div class="vinyl-label"><span>?</span></div></div>`;
+}
 
 function timelineRow(pi, { plain = false } = {}) {
   const g = ui.game;
@@ -170,6 +186,7 @@ function timelineRow(pi, { plain = false } = {}) {
   const t = plain ? null : g.turn;
   const isActive = pi === g.current;
   const opp = G.opponentOf(g);
+  const stealing = t?.phase === 'steal' && pi === opp;
   const n = p.timeline.length;
   const parts = [];
   let extra = 0;
@@ -179,10 +196,10 @@ function timelineRow(pi, { plain = false } = {}) {
     if (isActive && t) {
       if (t.phase === 'listen') {
         if (i === t.place) {
-          parts.push(ghost(pi, 'here'));
+          parts.push(ghost());
           extra++;
         } else {
-          parts.push(slot('place', i, pi));
+          parts.push(slot('place', i));
           slots++;
         }
       } else if (t.phase === 'reveal' && t.result === 'wrong' && i === t.place) {
@@ -192,9 +209,9 @@ function timelineRow(pi, { plain = false } = {}) {
     }
     if (i < n) {
       const id = p.timeline[i];
-      if (t?.phase === 'steal' && pi === opp) {
+      if (stealing) {
         // Opponent's cards are pickable during the steal step.
-        const picked = id === t.stealPick ? `picked ${PLAYER_CLASS[g.current]}` : '';
+        const picked = id === t.stealPick ? 'picked' : '';
         parts.push(`<button class="pick ${picked}" data-action="steal-pick" data-id="${esc(id)}">${card(id)}</button>`);
       } else {
         const isNew = (t?.phase === 'reveal' && id === t.songId) || (t?.phase !== 'steal' && id === t?.stolen);
@@ -203,11 +220,13 @@ function timelineRow(pi, { plain = false } = {}) {
     }
   }
 
+  const tag = plain ? '' : stealing ? 'Tap a card to steal' : isActive ? 'Timeline' : 'Opponent';
   return `
-    <section class="row ${PLAYER_CLASS[pi]} ${isActive ? 'active' : ''} ${t?.phase === 'steal' && pi === opp ? 'stealable' : ''}" style="--n:${n + extra};--slots:${slots}">
+    <section class="row ${PLAYER_CLASS[pi]} ${isActive && !plain ? 'active' : ''} ${stealing ? 'stealable' : ''}" style="--n:${n + extra};--slots:${slots}">
       <div class="row-label">
-        <span class="row-name">${esc(p.name)}</span>
-        <span class="row-count">${n}/${g.settings.target}</span>
+        ${dot(pi)}<span class="row-name">${esc(p.name)}</span>
+        ${tag ? `<span class="row-tag">${tag}</span>` : ''}
+        <span class="row-count">${n} / ${g.settings.target}</span>
       </div>
       <div class="strip">${parts.join('')}</div>
     </section>`;
@@ -216,109 +235,116 @@ function timelineRow(pi, { plain = false } = {}) {
 function scorePanel(pi) {
   const g = ui.game;
   const p = g.players[pi];
-  const pips = Array.from({ length: g.settings.target }, (_, i) => `<i class="${i < p.timeline.length ? 'on' : ''}"></i>`).join('');
-  const coins = p.tokens ? Array.from({ length: p.tokens }, () => '<b class="coin">★</b>').join('') : '<span class="muted">no tokens</span>';
-  const ready = p.tokens >= G.STEAL_COST ? '<span class="steal-ready">steal ready</span>' : '';
+  const pct = Math.min(100, (p.timeline.length / g.settings.target) * 100);
+  const steal = p.tokens >= G.STEAL_COST ? '<span class="steal-ready">Steal ready</span>' : '';
   return `
     <div class="score ${PLAYER_CLASS[pi]} ${g.current === pi && g.winner == null ? 'turn' : ''}">
-      <div class="score-name">${esc(p.name)}</div>
-      <div class="score-cards"><span class="big">${p.timeline.length}</span> / ${g.settings.target} cards</div>
-      <div class="pips">${pips}</div>
-      <div class="coins">${coins}${ready}</div>
+      <div class="score-head">${dot(pi)}<span class="score-name">${esc(p.name)}</span>${steal}</div>
+      <div class="score-stats">
+        <span><b>${p.timeline.length}</b> / ${g.settings.target}</span>
+        <span class="tokens" title="Tokens"><span class="star">★</span> ${p.tokens}</span>
+      </div>
+      <div class="progress"><i style="width:${pct}%"></i></div>
     </div>`;
 }
 
 function musicBar() {
   const m = ui.music;
-  if (!spotifyOn()) return `<div class="music muted">🔇 Silent mode, Spotify isn't connected</div>`;
+  if (!spotifyOn()) {
+    return `
+      <div class="music off">
+        <div class="status"><i class="status-dot"></i><span class="status-main">Silent mode</span><span class="status-sub">Spotify not connected</span></div>
+      </div>`;
+  }
   const label = {
     loading: 'Finding the song…',
-    playing: m.device ? `Now playing on ${esc(m.device)}` : 'Now playing',
+    playing: m.device ? `Playing on ${esc(m.device)}` : 'Playing',
     paused: 'Paused',
-    error: `⚠ ${esc(m.error ?? 'Playback failed')}`,
+    error: esc(m.error ?? 'Playback failed'),
     off: 'Ready',
   }[m.status];
-  const eq = m.status === 'playing' ? '<span class="eq"><i></i><i></i><i></i><i></i><i></i></span>' : '';
   const errorFix =
     m.status === 'error' && m.notFound && ui.game?.turn?.phase === 'listen'
-      ? `<button class="btn small ghost-btn" data-action="replace-song">Swap song (free)</button>`
+      ? `<button class="btn tertiary small" data-action="replace-song">Swap song</button>`
       : '';
   // On phones the Spotify app often needs to be opened to wake it up.
   const openApp =
-    m.status === 'error' && !S.browserPlaybackSupported ? `<a class="btn small ghost-btn" href="spotify:">Open Spotify</a>` : '';
+    m.status === 'error' && !S.browserPlaybackSupported ? `<a class="btn tertiary small" href="spotify:">Open Spotify</a>` : '';
   return `
     <div class="music ${m.status}">
-      ${eq}<span>${label}</span>
-      <button class="btn small ghost-btn" data-action="toggle-music">${m.status === 'playing' ? '❚❚ Pause' : '▶ Play'}</button>
-      <button class="btn small ghost-btn" data-action="restart-music">↺ Restart</button>
-      ${openApp}${errorFix}
+      <div class="status"><i class="status-dot"></i><span class="status-main">${label}</span><span class="status-sub">Spotify</span></div>
+      <div class="music-actions">
+        <button class="btn tertiary small" data-action="toggle-music">${m.status === 'playing' ? `${ICON.pause}Pause` : `${ICON.play}Play`}</button>
+        <button class="btn tertiary small" data-action="restart-music" aria-label="Restart song">${ICON.restart}<span class="lbl">Restart</span></button>
+        ${openApp}${errorFix}
+      </div>
     </div>`;
 }
 
-const RESULT_TEXT = {
-  correct: (a) => `✅ Nailed it! ${a} keeps the card.`,
-  wrong: () => `❌ Not quite. The card is discarded.`,
+const RESULT = {
+  correct: { title: 'Correct', sub: (a) => `${a} keeps the card.` },
+  wrong: { title: 'Not quite', sub: () => 'The card is discarded.' },
 };
 
 function stage() {
   const g = ui.game;
   const t = g.turn;
   const a = g.players[g.current];
-  const oi = G.opponentOf(g);
-  const o = g.players[oi];
-  const pc = PLAYER_CLASS[g.current];
+  const o = g.players[G.opponentOf(g)];
 
   if (t.phase === 'reveal') {
     const animate = ui.animatedTurn !== g.turnNumber;
     ui.animatedTurn = g.turnNumber;
+    const r = RESULT[t.result];
     return `
       <div class="stage">
+        ${turnLabel(g)}
         <div class="flip ${animate ? 'animate' : 'done'}">
-          <div class="card mystery back"><div class="vinyl"></div></div>
+          ${vinyl({ cls: 'back' })}
           ${card(t.songId, { cls: 'hero front' })}
         </div>
         <div class="stage-info">
-          <div class="turn-label ${pc}">Turn ${g.turnNumber} · ${esc(a.name)}</div>
-          <h2 class="result ${t.result}">${RESULT_TEXT[t.result](esc(a.name), esc(o.name))}</h2>
-          <button class="btn toggle ${t.named ? 'on' : ''}" data-action="named">
-            ${t.named ? '★ Named it! +1 token' : `Did ${esc(a.name)} name the artist <u>and</u> title? +1 ★`}
+          <h2 class="result ${t.result}"><i class="result-mark">${t.result === 'correct' ? '✓' : '✕'}</i>${r.title}</h2>
+          <p class="hint">${r.sub(esc(a.name))}</p>
+          <button class="btn secondary toggle ${t.named ? 'on' : ''}" data-action="named">
+            ${t.named ? '★&ensp;Named it · +1 token' : `${esc(a.name)} named the artist and title? +1 ★`}
           </button>
+          ${musicBar()}
           <div class="actions">
             ${
               g.winner != null
-                ? `<button class="btn primary" data-action="show-winner">🏆 And the winner is…</button>`
-                : `<button class="btn primary" data-action="next">Next: ${esc(o.name)} ▶</button>`
+                ? `<button class="btn primary" data-action="show-winner">See the winner</button>`
+                : `<button class="btn primary" data-action="next">Next: ${esc(o.name)}’s turn</button>`
             }
           </div>
-          ${musicBar()}
         </div>
       </div>`;
   }
 
-  const spinning = ui.music.status === 'playing' ? 'spin' : '';
   let heading, body, actions;
   if (t.phase === 'listen') {
-    heading = `<div class="turn-label ${pc}">Turn ${g.turnNumber} · ${esc(a.name)}</div><h2>Where does this song go?</h2>`;
-    body = `<p class="hint">${
-      t.place == null ? `Tap a <b>+</b> in ${esc(a.name)}'s timeline.` : 'Happy with that spot? Lock it in.'
-    } Name the artist &amp; title for +1 ★.</p>`;
+    heading = '<h2>Where does this song belong?</h2>';
+    body = `
+      <p class="hint">${t.place == null ? 'Place the mystery song somewhere in your timeline.' : 'Happy with that spot? Lock it in.'}</p>
+      <p class="hint subtle">Name the artist and title for +1 ★</p>`;
     actions = `<button class="btn primary" data-action="lock" ${t.place == null ? 'disabled' : ''}>Lock it in</button>`;
   } else {
-    heading = `<div class="turn-label ${pc}">Turn ${g.turnNumber} · ${esc(a.name)}</div><h2>${esc(a.name)}, steal a card?</h2>`;
-    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${esc(o.name)}'s timeline${
-      t.stealPick ? '.' : `. Tap the one you want.`
+    heading = '<h2>Steal a card?</h2>';
+    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${esc(o.name)}’s timeline${
+      t.stealPick ? '.' : '. Tap the one you want.'
     } The song plays after this.</p>`;
     actions = `
-      <button class="btn primary ${pc}" data-action="confirm-steal" ${t.stealPick == null ? 'disabled' : ''}>Steal it (−${G.STEAL_COST} ★)</button>
-      <button class="btn" data-action="decline-steal">Not now, play the song</button>`;
+      <button class="btn primary" data-action="confirm-steal" ${t.stealPick == null ? 'disabled' : ''}>Steal it (−${G.STEAL_COST} ★)</button>
+      <button class="btn secondary" data-action="decline-steal">Not now, play the song</button>`;
   }
   return `
     <div class="stage">
-      <div class="card mystery hero"><div class="vinyl ${spinning}"></div><span class="mystery-q">?</span></div>
+      ${turnLabel(g)}
+      <div class="record">${vinyl({ spin: t.phase === 'listen' && ui.music.status === 'playing' })}</div>
       <div class="stage-info">
         ${heading}${body}
-        <div class="actions">${actions}</div>
         ${t.phase === 'steal' ? '' : musicBar()}
+        <div class="actions">${actions}</div>
       </div>
     </div>`;
 }
@@ -329,8 +355,8 @@ function spotifyPanel() {
   const redirect = S.redirectUri();
   if (!sp.connected) {
     return `
-      <div class="panel spotify">
-        <h3><span class="sp-logo">●</span> Connect Spotify</h3>
+      <section class="panel spotify">
+        <h3 class="panel-title"><i class="status-dot"></i>Spotify</h3>
         <ol class="steps">
           <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> and <b>Create app</b>.</li>
           <li>Add this <b>Redirect URI</b>:<br><code class="copy" data-action="copy" data-text="${esc(redirect)}" title="Click to copy">${esc(redirect)}</code></li>
@@ -338,35 +364,35 @@ function spotifyPanel() {
         </ol>
         <div class="inline">
           <input id="client-id" placeholder="Paste Client ID" value="${esc(clientId)}" spellcheck="false" autocomplete="off">
-          <button class="btn primary sp" data-action="connect">Connect</button>
+          <button class="btn secondary" data-action="connect">Connect</button>
         </div>
-        <p class="hint small">Needs Spotify Premium. You can also play in silent mode and use your own music.</p>
+        <p class="hint small">Needs Spotify Premium. Without it the game runs in silent mode.</p>
         ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
-      </div>`;
+      </section>`;
   }
   return `
-    <div class="panel spotify">
-      <h3><span class="sp-logo">●</span> Spotify connected</h3>
-      <p>${sp.profile ? `Signed in as <b>${esc(sp.profile.display_name || sp.profile.id)}</b>` : 'Signed in'}</p>
+    <section class="panel spotify connected">
+      <h3 class="panel-title"><i class="status-dot"></i>Spotify connected</h3>
+      <p class="signed-in">${sp.profile ? `Signed in as <b>${esc(sp.profile.display_name || sp.profile.id)}</b>` : 'Signed in'}</p>
       <p class="hint small">${
         S.browserPlaybackSupported
-          ? 'Music plays in this browser tab. To play on a TV, cast the tab. For a speaker, pick it as your computer\'s sound output.'
-          : "Music plays through Spotify on this phone. To hear it on a speaker or TV, pick it with AirPlay or Bluetooth, not Spotify's own device list."
+          ? 'Music plays in this browser tab. To play on a TV, cast the tab. For a speaker, pick it as your computer’s sound output.'
+          : 'Music plays through Spotify on this phone. To hear it on a speaker or TV, pick it with AirPlay or Bluetooth, not Spotify’s own device list.'
       }</p>
       ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
-      <button class="btn small ghost-btn" data-action="disconnect">Disconnect</button>
-    </div>`;
+      <button class="btn tertiary small" data-action="disconnect">Disconnect</button>
+    </section>`;
 }
 
 function rulesHtml() {
   return `
-    <h3>How to play</h3>
+    <h3 class="modal-title">How to play</h3>
     <ol class="rules">
       <li>Each player starts with one card in their timeline and no tokens.</li>
-      <li>On your turn a mystery song plays. Tap the <b>+</b> where you think it belongs, oldest on the left and newest on the right.</li>
+      <li>On your turn a mystery song plays. Tap a <b>+</b> where you think it belongs, oldest on the left and newest on the right.</li>
       <li>Name the <b>artist and title</b> to earn <b>+1 ★</b>, even if you got the year wrong.</li>
-      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from your opponent's timeline.</li>
-      <li>First to the target number of cards wins!</li>
+      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from your opponent’s timeline.</li>
+      <li>First to the target number of cards wins.</li>
     </ol>`;
 }
 
@@ -375,14 +401,15 @@ function modal() {
   const content =
     ui.modal === 'rules'
       ? rulesHtml()
-      : `${spotifyPanel()}
-         <div class="panel">
-           <h3>Game</h3>
+      : `<h3 class="modal-title">Settings</h3>
+         ${spotifyPanel()}
+         <section class="panel">
+           <h3 class="panel-title">Game</h3>
            <div class="actions">
-             <button class="btn" data-action="fullscreen">⛶ Fullscreen</button>
-             <button class="btn danger" data-action="quit">End game</button>
+             <button class="btn secondary" data-action="fullscreen">⛶&ensp;Fullscreen</button>
+             <button class="btn tertiary danger" data-action="quit">End game</button>
            </div>
-         </div>`;
+         </section>`;
   return `
     <div class="modal-backdrop" data-action="close-modal">
       <div class="modal" data-stop>
@@ -399,43 +426,44 @@ function setupScreen() {
   const count = G.deckFor(s.decades).length;
   const decadeChips = DECADES.map(
     (d) =>
-      `<button class="chip ${decadeClass(d)} ${s.decades.includes(d) ? 'on' : ''}" data-action="decade" data-d="${d}">${decadeLabel(d)}</button>`,
+      `<button class="chip ${decadeClass(d)} ${s.decades.includes(d) ? 'on' : ''}" data-action="decade" data-d="${d}" aria-pressed="${s.decades.includes(d)}"><i></i>${decadeLabel(d)}</button>`,
   ).join('');
   return `
     <main class="setup">
       <header class="hero-title">
-        <div class="logo">HIT<span>LINE</span></div>
-        <p class="tagline">The music timeline game · ${ARTIST_COUNT} artists · ${SONGS.length.toLocaleString()} songs · 1950s to today</p>
+        ${logo('big')}
+        <p class="tagline">The music timeline game</p>
+        <p class="tagline sub">${SONGS.length.toLocaleString()} songs · ${ARTIST_COUNT} artists · 1950s to today</p>
       </header>
       <div class="setup-grid">
-        <div class="panel">
-          <h3>Players</h3>
+        <section class="panel">
+          <h3 class="panel-title">Players</h3>
           <div class="names">
-            <input class="p0" id="name0" maxlength="16" value="${esc(s.names[0])}" placeholder="Player 1">
+            <label class="name-input">${dot(0)}<input id="name0" maxlength="16" value="${esc(s.names[0])}" placeholder="Player 1" aria-label="Player 1 name"></label>
             <span class="vs">vs</span>
-            <input class="p1" id="name1" maxlength="16" value="${esc(s.names[1])}" placeholder="Player 2">
+            <label class="name-input">${dot(1)}<input id="name1" maxlength="16" value="${esc(s.names[1])}" placeholder="Player 2" aria-label="Player 2 name"></label>
           </div>
           <div class="two">
-            <label class="field">Cards to win
+            <label class="field"><span class="field-label">Cards to win</span>
               <select id="target">${[5, 8, 10, 12, 15, 20, 25, 30].map((n) => `<option ${n === s.target ? 'selected' : ''}>${n}</option>`).join('')}</select>
             </label>
-            <label class="field">Starting ★ tokens
+            <label class="field"><span class="field-label">Starting tokens</span>
               <select id="tokens">${[0, 1, 2, 3, 4, 5].map((n) => `<option ${n === s.startTokens ? 'selected' : ''}>${n}</option>`).join('')}</select>
             </label>
           </div>
-          <div class="field">Decades <span class="muted">(${count.toLocaleString()} songs)</span>
+          <div class="field"><span class="field-label">Decades <span class="count">${count.toLocaleString()} songs</span></span>
             <div class="chips">${decadeChips}</div>
           </div>
           ${ui.setupError ? `<p class="error">${esc(ui.setupError)}</p>` : ''}
           <div class="actions">
             <button class="btn primary big" data-action="start">Start game</button>
-            ${ui.savedGame ? `<button class="btn big" data-action="resume">Resume last game</button>` : ''}
-            <button class="btn" data-action="rules">How to play</button>
+            ${ui.savedGame ? `<button class="btn secondary big" data-action="resume">Resume last game</button>` : ''}
+            <button class="btn tertiary" data-action="rules">How to play</button>
           </div>
-        </div>
+        </section>
         ${spotifyPanel()}
       </div>
-      <p class="cast-tip">📺 <b>To play on your TV:</b> in Chrome open the ⋮ menu, choose <b>Cast…</b>, then cast this <b>tab</b>. Music from this tab goes to the TV too. Hit ⛶ for fullscreen.</p>
+      <p class="cast-tip"><b>Playing on a TV?</b> From a phone, mirror your screen and send sound with AirPlay or Bluetooth. From a laptop, use Chrome’s ⋮ menu → Cast… → Cast tab.</p>
     </main>`;
 }
 
@@ -444,18 +472,15 @@ function gameScreen() {
   return `
     <main class="game">
       <header class="topbar">
-        ${scorePanel(0)}
-        <div class="center-title">
-          <div class="logo small">HIT<span>LINE</span></div>
-          <div class="deck-left">${g.deck.length} songs left</div>
-          <div class="tools">
-            <button class="icon" data-action="rules" title="Rules">?</button>
-            <button class="icon" data-action="fullscreen" title="Fullscreen">⛶</button>
-            <button class="icon" data-action="settings" title="Settings">⚙</button>
-          </div>
+        ${logo('small')}
+        <div class="deck-left">${g.deck.length} songs left</div>
+        <div class="tools">
+          <button class="icon" data-action="rules" title="How to play" aria-label="How to play">?</button>
+          <button class="icon" data-action="fullscreen" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+          <button class="icon" data-action="settings" title="Settings" aria-label="Settings">⚙</button>
         </div>
-        ${scorePanel(1)}
       </header>
+      <div class="scores">${scorePanel(0)}${scorePanel(1)}</div>
       ${stage()}
       <div class="rows">
         ${timelineRow(g.current)}
@@ -467,18 +492,19 @@ function gameScreen() {
 function winnerScreen() {
   const g = ui.game;
   const w = g.winner;
-  const title = w === 'tie' ? "It's a tie!" : `${esc(g.players[w].name)} wins!`;
-  const confetti = Array.from({ length: 40 }, (_, i) => `<i style="--x:${(i * 37) % 100};--d:${(i % 7) * 0.4}s;--c:${i % 7}"></i>`).join('');
+  const title = w === 'tie' ? 'It’s a tie' : `${esc(g.players[w].name)} wins`;
+  const confetti = Array.from({ length: 32 }, (_, i) => `<i style="--x:${(i * 37) % 100};--d:${((i * 1.37) % 6).toFixed(2)}s;--s:${0.8 + (i % 5) * 0.1}"></i>`).join('');
   return `
     <main class="winner">
       <div class="confetti">${confetti}</div>
-      <div class="logo">HIT<span>LINE</span></div>
-      <h1 class="${w === 'tie' ? '' : PLAYER_CLASS[w]}">🏆 ${title}</h1>
-      <p class="tagline">${g.players.map((p) => `${esc(p.name)}: ${p.timeline.length} cards`).join(' · ')}</p>
+      ${logo('small')}
+      <div class="eyebrow center">Game over</div>
+      <h1>${w === 'tie' ? '' : dot(w)}${title}</h1>
+      <p class="tagline">${g.players.map((p) => `${esc(p.name)} · ${p.timeline.length} cards`).join('&emsp;')}</p>
       <div class="rows">${timelineRow(0, { plain: true })}${timelineRow(1, { plain: true })}</div>
       <div class="actions center">
         <button class="btn primary big" data-action="rematch">Rematch</button>
-        <button class="btn big" data-action="quit">New setup</button>
+        <button class="btn secondary big" data-action="quit">New setup</button>
       </div>
     </main>`;
 }
