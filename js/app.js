@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=12';
-import * as G from './game.js?v=12';
-import * as S from './spotify.js?v=12';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=13';
+import * as G from './game.js?v=13';
+import * as S from './spotify.js?v=13';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -401,7 +401,7 @@ function setupScreen() {
     <main class="setup">
       <header class="hero-title">
         <div class="logo">HIT<span>LINE</span></div>
-        <p class="tagline">The music timeline game · ${ARTIST_COUNT} artists · ${SONGS.length} songs · 1950s to today</p>
+        <p class="tagline">The music timeline game · ${ARTIST_COUNT} artists · ${SONGS.length.toLocaleString()} songs · 1950s to today</p>
       </header>
       <div class="setup-grid">
         <div class="panel">
@@ -419,7 +419,7 @@ function setupScreen() {
               <select id="tokens">${[0, 1, 2, 3, 4, 5].map((n) => `<option ${n === s.startTokens ? 'selected' : ''}>${n}</option>`).join('')}</select>
             </label>
           </div>
-          <div class="field">Decades <span class="muted">(${count} songs)</span>
+          <div class="field">Decades <span class="muted">(${count.toLocaleString()} songs)</span>
             <div class="chips">${decadeChips}</div>
           </div>
           ${ui.setupError ? `<p class="error">${esc(ui.setupError)}</p>` : ''}
