@@ -11,6 +11,7 @@
   --spotify: #1ed760;
   --gold: #fbbf24;
 
+  --d1950: linear-gradient(150deg, #fca5a5, #e11d48);
   --d1960: linear-gradient(150deg, #f9a8d4, #ec4899);
   --d1970: linear-gradient(150deg, #fdba74, #f97316);
   --d1980: linear-gradient(150deg, #fde047, #eab308);
@@ -277,6 +278,7 @@ code.copy.copied::after { content: '  ✓ copied'; color: var(--spotify); }
   overflow: hidden;
 }
 .card.face { color: #160b24; }
+.card.d1950 { background: var(--d1950); }
 .card.d1960 { background: var(--d1960); }
 .card.d1970 { background: var(--d1970); }
 .card.d1980 { background: var(--d1980); }
@@ -284,6 +286,7 @@ code.copy.copied::after { content: '  ✓ copied'; color: var(--spotify); }
 .card.d2000 { background: var(--d2000); }
 .card.d2010 { background: var(--d2010); }
 .card.d2020 { background: var(--d2020); }
+.chip.d1950 { background: var(--d1950); }
 .chip.d1960 { background: var(--d1960); }
 .chip.d1970 { background: var(--d1970); }
 .chip.d1980 { background: var(--d1980); }

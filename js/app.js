@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=14';
-import * as G from './game.js?v=14';
-import * as S from './spotify.js?v=14';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=15';
+import * as G from './game.js?v=15';
+import * as S from './spotify.js?v=15';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -35,6 +35,10 @@ const ui = {
   setupError: null,
   animatedTurn: null,
 };
+
+// Setups saved before the 50s option existed had those songs inside the 60s, so keep them in.
+if (!ui.setup.decades.includes(1950) && ui.setup.decades.includes(1960) && !ui.setup.has50s) ui.setup.decades.unshift(1950);
+ui.setup.has50s = true;
 
 const saved = load(SAVE_KEY, null);
 if (saved?.version === 2 && saved.turn && saved.winner == null) ui.savedGame = saved;
@@ -139,7 +143,7 @@ async function refreshSpotify() {
 
 // ---------- Rendering helpers ----------
 
-const decadeClass = (year) => `d${Math.max(1960, decadeOf(year))}`;
+const decadeClass = (year) => `d${Math.max(1950, decadeOf(year))}`;
 const decadeLabel = (d) => `${String(d).slice(2)}s`;
 const PLAYER_CLASS = ['p0', 'p1'];
 

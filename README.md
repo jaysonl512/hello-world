@@ -4,7 +4,7 @@ A two-player music timeline game for your TV, powered by Spotify. A mystery song
 place it in your timeline of cards. Get the year order right and you keep the card. First to 10
 cards wins.
 
-- **247 big artists, 60s → today**, five of their best-known songs each (1,235 cards). Includes
+- **247 big artists, 50s → today**, five of their best-known songs each (1,235 cards). Includes
   a few 50s classics like Chuck Berry and Johnny Cash's "I Walk the Line".
 - **TV-sized cards and scoreboard**: card counts, progress bars, ★ tokens, and both timelines
   on screen the whole time.

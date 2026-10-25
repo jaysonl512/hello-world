@@ -295,7 +295,7 @@ export const ARTIST_COUNT = ARTISTS.length;
 
 export const decadeOf = (year) => Math.floor(year / 10) * 10;
 
-// Songs before 1960 are rolled into the 60s bucket for filtering purposes.
-export const decadeBucket = (year) => Math.max(1960, decadeOf(year));
+// Anything older than the 50s is rolled into the 50s bucket for filtering purposes.
+export const decadeBucket = (year) => Math.max(1950, decadeOf(year));
 
-export const DECADES = [1960, 1970, 1980, 1990, 2000, 2010, 2020];
+export const DECADES = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
