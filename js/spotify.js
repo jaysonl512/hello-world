@@ -323,20 +323,6 @@ async function waitForPlaying(uri, deviceId, seconds) {
   return false;
 }
 
-// Fallback for phones: an iPhone app in the background may refuse to load a new song but will
-// still skip tracks, so queue the song and skip to it, then nudge play if it is left paused.
-async function queueAndSkip(deviceId, uri) {
-  await api('/me/player/queue', { method: 'POST', query: { uri, device_id: deviceId } });
-  await api('/me/player/next', { method: 'POST', query: { device_id: deviceId } });
-  if (await waitForPlaying(uri, deviceId, 3)) return true;
-  const state = await playerState();
-  if (state?.device?.id === deviceId && isOurSong(state, uri) && !state.is_playing) {
-    await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId } }).catch(() => {});
-    return waitForPlaying(uri, deviceId, 3);
-  }
-  return false;
-}
-
 // Short description of what Spotify reports, without revealing the song title.
 async function describePlayer(uri) {
   const state = await playerState();
@@ -345,18 +331,16 @@ async function describePlayer(uri) {
   return `Spotify reports: ${state.is_playing ? 'playing' : 'paused'} on ${state.device.name}, ${what} loaded.`;
 }
 
-// Returns the name of the device the song is playing on. A phone app waking up from the
-// background can take several seconds, so poll for ~8s and re-send the command once midway.
+// Returns the name of the device the song is playing on. Sends a single play command and then
+// only watches: re-sending commands while a phone is still buffering interrupts it, so the
+// player is never nudged again here (the ▶ Play button is the manual retry).
 export async function playTrack(uri) {
   const { id: deviceId, name } = await targetDevice();
   await sendPlay(deviceId, uri);
   if (usingSdk() && deviceId === sdk.deviceId) return name;
-  if (await waitForPlaying(uri, deviceId, 4)) return name;
-  if (await queueAndSkip(deviceId, uri).catch(() => false)) return name;
-  await sendPlay(deviceId, uri);
-  if (await waitForPlaying(uri, deviceId, 4)) return name;
+  if (await waitForPlaying(uri, deviceId, 12)) return name;
   const err = new Error(
-    `Spotify on ${name} didn't start the song. ${await describePlayer(uri)} Tap Open Spotify, play any song, come back and tap ▶ Play.`,
+    `Spotify on ${name} didn't start the song. ${await describePlayer(uri)} Tap ▶ Play to try again, or Swap song.`,
   );
   err.notFound = true; // the track itself may be the problem, so offer a free swap
   throw err;
