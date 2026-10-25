@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=7';
-import * as G from './game.js?v=7';
-import * as S from './spotify.js?v=7';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=8';
+import * as G from './game.js?v=8';
+import * as S from './spotify.js?v=8';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -340,13 +340,16 @@ function spotifyPanel() {
         ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
       </div>`;
   }
+  // On phones "This phone" already means the phone's Spotify app, so phones aren't listed again.
+  const isPhone = (d) => !S.browserPlaybackSupported && d.type === 'Smartphone';
+  if (sp.devices.some((d) => d.id === S.getDevicePreference() && isPhone(d))) S.setDevicePreference(S.SDK_DEVICE);
   const pref = S.getDevicePreference();
   const options = [
     `<option value="${S.SDK_DEVICE}" ${pref === S.SDK_DEVICE ? 'selected' : ''}>${
       S.browserPlaybackSupported ? 'This browser tab (cast the tab to your TV)' : 'This phone (Spotify app)'
     }</option>`,
     ...sp.devices
-      .filter((d) => d.name !== 'Hitster TV')
+      .filter((d) => d.name !== 'Hitster TV' && !isPhone(d))
       .map((d) => `<option value="${esc(d.id)}" ${pref === d.id ? 'selected' : ''}>${esc(d.name)} (${esc(d.type)})</option>`),
   ];
   if (pref !== S.SDK_DEVICE && !sp.devices.some((d) => d.id === pref)) {
