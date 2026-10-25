@@ -239,12 +239,15 @@ function musicBar() {
     m.status === 'error' && m.notFound && ui.game?.turn?.phase === 'listen'
       ? `<button class="btn small ghost-btn" data-action="replace-song">Swap song (free)</button>`
       : '';
+  // On phones the Spotify app often needs to be opened to wake it up.
+  const openApp =
+    m.status === 'error' && !S.browserPlaybackSupported ? `<a class="btn small ghost-btn" href="spotify:">Open Spotify</a>` : '';
   return `
     <div class="music ${m.status}">
       ${eq}<span>${label}</span>
       <button class="btn small ghost-btn" data-action="toggle-music">${m.status === 'playing' ? '❚❚ Pause' : '▶ Play'}</button>
       <button class="btn small ghost-btn" data-action="restart-music">↺ Restart</button>
-      ${errorFix}
+      ${openApp}${errorFix}
     </div>`;
 }
 
@@ -340,7 +343,7 @@ function spotifyPanel() {
   const pref = S.getDevicePreference();
   const options = [
     `<option value="${S.SDK_DEVICE}" ${pref === S.SDK_DEVICE ? 'selected' : ''}>${
-      S.browserPlaybackSupported ? 'This browser tab (cast the tab to your TV)' : 'Auto: the Spotify app that is open'
+      S.browserPlaybackSupported ? 'This browser tab (cast the tab to your TV)' : 'This phone (Spotify app)'
     }</option>`,
     ...sp.devices
       .filter((d) => d.name !== 'Hitster TV')

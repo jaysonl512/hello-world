@@ -21,7 +21,7 @@ const LS = {
   device: 'hitster.spotify.device',
 };
 
-// The default device choice: this browser tab on desktop, or "whatever Spotify app is open" on phones.
+// The default device choice: this browser tab on desktop, or this phone's Spotify app on phones.
 export const SDK_DEVICE = 'sdk';
 
 // Spotify's Web Playback SDK only supports desktop browsers.
@@ -34,6 +34,8 @@ export const usingSdk = () => browserPlaybackSupported && getDevicePreference() 
 
 const NO_DEVICE =
   'No Spotify device found. Open the Spotify app (on this phone or your TV), play any song for a second, then tap ▶ Play.';
+const NO_PHONE =
+  "Spotify on this phone isn't awake. Tap Open Spotify, play any song for a second, come back and tap ▶ Play.";
 
 export const redirectUri = () => location.origin + location.pathname;
 
@@ -272,20 +274,20 @@ export function unlockAudio() {
   sdk.player?.activateElement?.();
 }
 
-// Resolves the device to play on. A chosen device that has gone offline falls back to whatever
-// Spotify app is available rather than failing every song.
+// Resolves the device to play on: the chosen device if Spotify lists it, otherwise the default
+// (this browser on desktop, this phone's Spotify app on phones). Never silently switches to
+// some other device like a TV.
 async function targetDevice() {
   if (usingSdk()) return { id: await initPlayer(), name: 'this browser' };
   const pref = getDevicePreference();
   const devices = (await getDevices()).filter((d) => !d.is_restricted && d.name !== 'Hitster TV');
-  const device =
-    devices.find((d) => d.id === pref) ??
-    devices.find((d) => d.is_active) ??
-    devices.find((d) => d.type === 'Smartphone') ??
-    devices[0];
-  if (device) return device;
+  const chosen = pref !== SDK_DEVICE && devices.find((d) => d.id === pref);
+  if (chosen) return chosen;
   if (browserPlaybackSupported) return { id: await initPlayer(), name: 'this browser' };
-  throw new Error(NO_DEVICE);
+  const phones = devices.filter((d) => d.type === 'Smartphone');
+  const phone = phones.find((d) => d.is_active) ?? phones[0];
+  if (phone) return phone;
+  throw new Error(NO_PHONE);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -305,24 +307,27 @@ async function sendPlay(deviceId, uri) {
 
 // Spotify can accept a play command and then not play (e.g. the app was asleep), so for
 // Spotify Connect devices confirm the song actually started, retrying once.
-async function isPlaying(uri) {
+async function isPlaying(uri, deviceId) {
   const state = await api('/me/player', { query: { market: 'from_token' } }).catch(() => null);
   const item = state?.item;
-  return !!state?.is_playing && (item?.uri === uri || item?.linked_from?.uri === uri);
+  return (
+    !!state?.is_playing && state.device?.id === deviceId && (item?.uri === uri || item?.linked_from?.uri === uri)
+  );
 }
 
-// Returns the name of the device the song is playing on.
+// Returns the name of the device the song is playing on. A phone app waking up from the
+// background can take several seconds, so poll for ~8s and re-send the command once midway.
 export async function playTrack(uri) {
   const { id: deviceId, name } = await targetDevice();
   await sendPlay(deviceId, uri);
   if (usingSdk() && deviceId === sdk.deviceId) return name;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    await sleep(1500);
-    if (await isPlaying(uri)) return name;
-    if (attempt === 0) await sendPlay(deviceId, uri);
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    await sleep(1000);
+    if (await isPlaying(uri, deviceId)) return name;
+    if (attempt === 4) await sendPlay(deviceId, uri);
   }
   const err = new Error(
-    `Spotify on ${name} didn't start the song. Open the Spotify app, press play on anything, come back and tap ▶ Play.`,
+    `Spotify on ${name} didn't start the song. Tap Open Spotify, play any song for a second, come back and tap ▶ Play.`,
   );
   err.notFound = true; // the track itself may be the problem, so offer a free swap
   throw err;

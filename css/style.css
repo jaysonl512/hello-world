@@ -519,3 +519,4 @@ code.copy.copied::after { content: '  ✓ copied'; color: var(--spotify); }
   .row:not(.active) { --card-w: min(16vw, max(12vw, var(--fit))); }
   .winner h1 { font-size: 2.6rem; }
 }
+a.btn { display: inline-block; text-decoration: none; }
