@@ -473,7 +473,7 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
 @keyframes flipFront { from { transform: rotateY(180deg); } to { transform: rotateY(360deg); } }
 
 /* ---------- Timelines ---------- */
-.rows { display: flex; flex-direction: column; gap: 0.9rem; margin-top: auto; }
+.rows { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.25rem; }
 .row {
   /* n cards + slots must fit in one line; below ~4.2vw cards wrap onto another line instead */
   --slot-w: 2.1rem;
@@ -676,6 +676,13 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+
+/* ---------- Tablets held upright (e.g. iPad portrait) ---------- */
+@media (min-width: 761px) and (orientation: portrait) {
+  :root { --hero: min(26vw, 240px); }
+  .row { --card-w: min(13vw, 150px, max(6vw, var(--fit))); }
+  .row:not(.active) { --card-w: min(9vw, 110px, max(6vw, var(--fit))); }
 }
 
 /* ---------- Phones (the main way it's played) ---------- */

@@ -24,17 +24,19 @@ const LS = {
 // Web Playback SDK), or this phone's Spotify app on phones. Where the sound goes from there is
 // up to the device (AirPlay, Bluetooth, casting the tab), never chosen by the game.
 // Spotify's Web Playback SDK only supports desktop browsers.
-export const browserPlaybackSupported = !(
-  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-);
+const ua = navigator.userAgent;
+// iPadOS Safari reports itself as a Mac, so a touch-capable "Mac" is an iPad.
+const isTablet = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || (/Android/i.test(ua) && !/Mobile/i.test(ua));
+export const browserPlaybackSupported = !(isTablet || /iPhone|iPod|Android/i.test(ua));
+// What to call this device in messages, and the type Spotify lists its app under.
+export const deviceWord = isTablet ? (/Android/i.test(ua) ? 'tablet' : 'iPad') : 'phone';
+const OWN_TYPE = isTablet ? 'Tablet' : 'Smartphone';
 
 export const usingSdk = () => browserPlaybackSupported;
 
 const NO_DEVICE =
   'No Spotify device found. Open the Spotify app (on this phone or your TV), play any song for a second, then tap ▶ Play.';
-const NO_PHONE =
-  "Spotify on this phone isn't awake. Tap Open Spotify, play any song for a second, come back and tap ▶ Play.";
+const NO_PHONE = `Spotify on this ${deviceWord} isn't awake. Tap Open Spotify, play any song for a second, come back and tap ▶ Play.`;
 
 export const redirectUri = () => location.origin + location.pathname;
 
@@ -272,11 +274,12 @@ export function unlockAudio() {
   sdk.player?.activateElement?.();
 }
 
-// Resolves the device to play on: this browser on desktop, this phone's Spotify app on phones.
+// Resolves the device to play on: this browser on desktop, this phone's or tablet's own Spotify
+// app on mobile (Spotify lists iPads as "Tablet", phones as "Smartphone").
 async function targetDevice() {
   if (usingSdk()) return { id: await initPlayer(), name: 'this browser' };
   const devices = (await getDevices()).filter((d) => !d.is_restricted);
-  const phones = devices.filter((d) => d.type === 'Smartphone');
+  const phones = devices.filter((d) => d.type === OWN_TYPE);
   // Spotify can list stale duplicate entries for the same phone; prefer the one it says is in use.
   const current = phones.length > 1 ? (await playerState())?.device : null;
   const phone = phones.find((d) => d.id === current?.id) ?? phones.find((d) => d.is_active) ?? phones[0];

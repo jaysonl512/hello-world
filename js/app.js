@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=19';
-import * as G from './game.js?v=19';
-import * as S from './spotify.js?v=19';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=21';
+import * as G from './game.js?v=21';
+import * as S from './spotify.js?v=21';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -410,7 +410,7 @@ function spotifyPanel() {
       <p class="hint small">${
         S.browserPlaybackSupported
           ? 'Music plays in this browser tab. To play on a TV, cast the tab. For a speaker, pick it as your computer’s sound output.'
-          : 'Music plays through Spotify on this phone. To hear it on a speaker or TV, pick it with AirPlay or Bluetooth, not Spotify’s own device list.'
+          : `Music plays through Spotify on this ${S.deviceWord}. To hear it on a speaker or TV, pick it with AirPlay or Bluetooth, not Spotify’s own device list.`
       }</p>
       ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
       <button class="btn tertiary small" data-action="disconnect">Disconnect</button>
