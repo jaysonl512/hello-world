@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=18';
-import * as G from './game.js?v=18';
-import * as S from './spotify.js?v=18';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=19';
+import * as G from './game.js?v=19';
+import * as S from './spotify.js?v=19';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -180,6 +180,27 @@ function vinyl({ spin = false, cls = '' } = {}) {
   return `<div class="vinyl ${spin ? 'spin' : ''} ${cls}"><div class="vinyl-label"><span>?</span></div></div>`;
 }
 
+// Splits a timeline into runs of cards that share a year: [{ start, end }] with end exclusive.
+function yearGroups(timeline) {
+  const groups = [];
+  timeline.forEach((id, i) => {
+    const last = groups.at(-1);
+    if (last && G.yearOf(timeline[last.start]) === G.yearOf(id)) last.end = i + 1;
+    else groups.push({ start: i, end: i + 1 });
+  });
+  return groups;
+}
+
+// Same-year cards are drawn as one pile, newest on top, each earlier card's artist peeking out.
+function stack(ids, newId) {
+  const order = [...ids.filter((id) => id !== newId), ...ids.filter((id) => id === newId)];
+  return `
+    <div class="stack ${ids.includes(newId) ? 'has-new' : ''}" style="--k:${ids.length}">
+      ${order.map((id, i) => `<div class="stack-item" style="--i:${i}">${card(id, { cls: id === newId ? 'new' : '' })}</div>`).join('')}
+      <span class="stack-count">×${ids.length}</span>
+    </div>`;
+}
+
 function timelineRow(pi, { plain = false } = {}) {
   const g = ui.game;
   const p = g.players[pi];
@@ -188,41 +209,53 @@ function timelineRow(pi, { plain = false } = {}) {
   const opp = G.opponentOf(g);
   const stealing = t?.phase === 'steal' && pi === opp;
   const n = p.timeline.length;
+  const newId = t?.phase === 'reveal' ? t.songId : t?.phase !== 'steal' ? t?.stolen : null;
   const parts = [];
-  let extra = 0;
+  let items = 0;
   let slots = 0;
 
-  for (let i = 0; i <= n; i++) {
-    if (isActive && t) {
-      if (t.phase === 'listen') {
-        if (i === t.place) {
-          parts.push(ghost());
-          extra++;
-        } else {
-          parts.push(slot('place', i));
-          slots++;
-        }
-      } else if (t.phase === 'reveal' && t.result === 'wrong' && i === t.place) {
-        parts.push(card(t.songId, { cls: 'wrong marker' }));
-        extra++;
-      }
-    }
-    if (i < n) {
-      const id = p.timeline[i];
-      if (stealing) {
-        // Opponent's cards are pickable during the steal step.
-        const picked = id === t.stealPick ? 'picked' : '';
-        parts.push(`<button class="pick ${picked}" data-action="steal-pick" data-id="${esc(id)}">${card(id)}</button>`);
+  // Piles spread back out during a steal so any single card can be picked.
+  const groups = stealing ? p.timeline.map((_, i) => ({ start: i, end: i + 1 })) : yearGroups(p.timeline);
+  // A saved placement inside a pile (from before piles existed) is shown at the pile's end.
+  const boundaryOf = (i) => groups.find((gr) => i > gr.start && i < gr.end)?.end ?? i;
+  const place = t?.place == null ? null : boundaryOf(t.place);
+
+  const gap = (i) => {
+    if (!isActive || !t) return;
+    if (t.phase === 'listen') {
+      if (i === place) {
+        parts.push(ghost());
+        items++;
       } else {
-        const isNew = (t?.phase === 'reveal' && id === t.songId) || (t?.phase !== 'steal' && id === t?.stolen);
-        parts.push(card(id, { cls: isNew ? 'new' : '' }));
+        parts.push(slot('place', i));
+        slots++;
       }
+    } else if (t.phase === 'reveal' && t.result === 'wrong' && i === place) {
+      parts.push(card(t.songId, { cls: 'wrong marker' }));
+      items++;
     }
+  };
+
+  for (const { start, end } of groups) {
+    gap(start);
+    const ids = p.timeline.slice(start, end);
+    if (stealing) {
+      // Opponent's cards are pickable during the steal step.
+      const id = ids[0];
+      const picked = id === t.stealPick ? 'picked' : '';
+      parts.push(`<button class="pick ${picked}" data-action="steal-pick" data-id="${esc(id)}">${card(id)}</button>`);
+    } else if (ids.length > 1) {
+      parts.push(stack(ids, newId));
+    } else {
+      parts.push(card(ids[0], { cls: ids[0] === newId ? 'new' : '' }));
+    }
+    items++;
   }
+  gap(n);
 
   const tag = plain ? '' : stealing ? 'Tap a card to steal' : isActive ? 'Timeline' : 'Opponent';
   return `
-    <section class="row ${PLAYER_CLASS[pi]} ${isActive && !plain ? 'active' : ''} ${stealing ? 'stealable' : ''}" style="--n:${n + extra};--slots:${slots}">
+    <section class="row ${PLAYER_CLASS[pi]} ${isActive && !plain ? 'active' : ''} ${stealing ? 'stealable' : ''}" style="--n:${Math.max(1, items)};--slots:${slots}">
       <div class="row-label">
         ${dot(pi)}<span class="row-name">${esc(p.name)}</span>
         ${tag ? `<span class="row-tag">${tag}</span>` : ''}

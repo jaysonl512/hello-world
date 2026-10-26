@@ -498,7 +498,7 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
 .row-count { margin-left: auto; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .strip {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* piles grow downward, so line everything up along the top */
   justify-content: center;
   flex-wrap: wrap;
   gap: var(--gap);
@@ -526,6 +526,35 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
   transition: border-color 0.15s, color 0.15s, background-color 0.15s;
 }
 .slot:hover { border-color: var(--accent); color: var(--accent); }
+.strip > .slot { margin-top: calc((var(--card-w) - var(--slot-w)) / 2); }
+
+/* Same-year pile: later cards sit lower, leaving each earlier card's artist line visible. */
+.stack {
+  --peek: calc(var(--card-w) * 0.22);
+  position: relative;
+  flex: none;
+  width: var(--card-w);
+  height: calc(var(--card-w) + (var(--k) - 1) * var(--peek));
+}
+.stack-item { position: absolute; left: 0; top: calc(var(--i) * var(--peek)); }
+.stack-item + .stack-item .card { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 -3px 10px rgba(0, 0, 0, 0.4); }
+.stack-count {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--card-w) * -0.1);
+  right: calc(var(--card-w) * -0.13);
+  min-width: max(1.1rem, calc(var(--card-w) * 0.18));
+  height: max(1.1rem, calc(var(--card-w) * 0.18));
+  padding: 0 0.3em;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--ink);
+  font-size: max(0.62rem, calc(var(--card-w) * 0.09));
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
 
 /* The chosen spot, before it's locked in. */
 .card.ghost {
