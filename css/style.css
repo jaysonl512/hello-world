@@ -278,7 +278,11 @@ code.copy {
 }
 code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-family: 'Outfit', sans-serif; }
 #client-id { flex: 1; padding: 0 0.9rem; font-size: 0.95rem; }
-.spotify .inline + .hint { margin-top: 0.75rem; }
+.connect-main { margin: 0.4rem 0 0.75rem; }
+.own-app { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+.own-app summary { cursor: pointer; color: var(--faint); font-size: 0.85rem; font-weight: 600; }
+.own-app summary:hover { color: var(--muted); }
+.own-app[open] summary { margin-bottom: 0.9rem; }
 .cast-tip { text-align: center; color: var(--faint); font-size: 0.85rem; line-height: 1.5; max-width: 44rem; margin: 2rem auto 0; }
 .cast-tip b { color: var(--muted); }
 

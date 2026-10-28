@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=21';
-import * as G from './game.js?v=21';
-import * as S from './spotify.js?v=21';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=22';
+import * as G from './game.js?v=22';
+import * as S from './spotify.js?v=22';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -390,17 +390,23 @@ function spotifyPanel() {
     return `
       <section class="panel spotify">
         <h3 class="panel-title"><i class="status-dot"></i>Spotify</h3>
-        <ol class="steps">
-          <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> and <b>Create app</b>.</li>
-          <li>Add this <b>Redirect URI</b>:<br><code class="copy" data-action="copy" data-text="${esc(redirect)}" title="Click to copy">${esc(redirect)}</code></li>
-          <li>Tick <b>Web API</b> and <b>Web Playback SDK</b>, save, and copy the <b>Client ID</b>.</li>
-        </ol>
-        <div class="inline">
-          <input id="client-id" placeholder="Paste Client ID" value="${esc(clientId)}" spellcheck="false" autocomplete="off">
-          <button class="btn secondary" data-action="connect">Connect</button>
-        </div>
-        <p class="hint small">Needs Spotify Premium. Without it the game runs in silent mode.</p>
+        <p class="hint">Log in with Spotify to hear the songs. Needs Spotify Premium; without it the game runs in silent mode.</p>
+        <button class="btn secondary connect-main" data-action="connect">Connect Spotify</button>
+        <p class="hint small">Login not working? Ask whoever set up Hitline to add your Spotify email to their app.</p>
         ${sp.error ? `<p class="error">${esc(sp.error)}</p>` : ''}
+        <!-- Only needed when running your own copy of Hitline with your own Spotify app. -->
+        <details class="own-app">
+          <summary>Use your own Spotify app</summary>
+          <ol class="steps">
+            <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> and <b>Create app</b>.</li>
+            <li>Add this <b>Redirect URI</b>:<br><code class="copy" data-action="copy" data-text="${esc(redirect)}" title="Click to copy">${esc(redirect)}</code></li>
+            <li>Tick <b>Web API</b> and <b>Web Playback SDK</b>, save, and copy the <b>Client ID</b>.</li>
+          </ol>
+          <div class="inline">
+            <input id="client-id" placeholder="Paste Client ID" value="${esc(clientId)}" spellcheck="false" autocomplete="off">
+            <button class="btn secondary" data-action="connect" data-custom="1">Connect</button>
+          </div>
+        </details>
       </section>`;
   }
   return `
@@ -665,14 +671,17 @@ const actions = {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen?.().catch(() => {});
   },
-  async connect() {
+  async connect(el) {
     readSetupForm();
-    const id = document.getElementById('client-id')?.value.trim();
-    if (!id) {
-      ui.spotify.error = 'Paste your Client ID first.';
-      return render();
+    // The main button uses Hitline's built-in app; the "own app" button uses the pasted Client ID.
+    if (el.dataset.custom) {
+      const id = document.getElementById('client-id')?.value.trim();
+      if (!id) {
+        ui.spotify.error = 'Paste your Client ID first.';
+        return render();
+      }
+      S.setClientId(id);
     }
-    S.setClientId(id);
     try {
       await S.login();
     } catch (err) {
