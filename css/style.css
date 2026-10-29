@@ -398,6 +398,22 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
   border-radius: 999px;
   padding: 0.15em 0.5em;
 }
+/* Any time: tap another player's seat to see their full cards. */
+.seat.viewable { cursor: pointer; transition: border-color 0.2s, transform 0.15s; }
+.seat.viewable:hover { border-color: var(--line-strong); }
+.seat.viewable:active { transform: translate(-50%, -50%) scale(0.97); }
+.seat.viewable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seat.viewable.open { border-color: var(--text); }
+.seat.viewable .seat-head::after { content: '▾'; margin-left: auto; padding-left: 0.3rem; color: var(--faint); font-size: 0.8rem; transition: transform 0.25s; }
+.seat.viewable.open .seat-head::after { transform: rotate(180deg); }
+.seat.viewable .seat-steal { margin-left: auto; }
+.seat.viewable:has(.seat-steal) .seat-head::after { margin-left: 0; }
+/* Bigger hands: short years, then a slim strip with one decade-colored sliver per card. */
+.minis.short { gap: 2px; }
+.minis.short .mini { font-size: 0.58rem; padding: 0.22em 0.28em; }
+.minis.bars { flex-wrap: nowrap; gap: 1px; height: 0.75rem; }
+.minis.bars .mini { flex: 1 1 0; min-width: 2px; padding: 0; border-radius: 2px; }
+.minis.bars .mini.new, .minis.bars .mini.picked { outline-offset: 0; }
 .mini.picked { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* The drawer under the table that shows one player's cards during a steal. */

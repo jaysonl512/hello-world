@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=30';
-import * as G from './game.js?v=30';
-import * as S from './spotify.js?v=30';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=31';
+import * as G from './game.js?v=31';
+import * as S from './spotify.js?v=31';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -35,8 +35,9 @@ const ui = {
   setupError: null,
   animatedTurn: null,
   tableSpin: null, // which seat is at the front of the table (see tableView)
-  stealOpen: null, // during a steal: whose cards are open in the drawer under the table
+  stealOpen: null, // whose cards are open in the drawer under the table (any time, not just steals)
   drawerShown: null, // whose drawer was last drawn, so the open animation plays only once
+  drawerKey: null, // the drawer closes when a new turn starts or a steal step ends
 };
 
 // Older setups only had two names; keep a name for every possible seat.
@@ -323,27 +324,41 @@ function seat(pi) {
   const p = g.players[pi];
   const t = g.turn;
   const newId = t?.phase === 'reveal' ? t.songId : t?.stolen;
+  // Seats stay compact as hands grow: full years, then short years, then one colored sliver
+  // per card. Tapping a seat opens the full cards in the drawer under the table.
+  const n = p.timeline.length;
+  // Small screens with a full table switch to the slimmer styles sooner.
+  // [full years up to, short years up to]; beyond that, the color strip.
+  const sideways = window.innerHeight < 520 && window.innerWidth > window.innerHeight;
+  const tight = g.players.length >= 4 && window.innerWidth < 900;
+  const [fullMax, shortMax] = sideways && g.players.length >= 3 ? [3, 6] : tight ? [6, 10] : [8, 16];
+  const density = n <= fullMax ? 'full' : n <= shortMax ? 'short' : 'bars';
   const chips = p.timeline
     .map((id) => {
       const y = G.yearOf(id);
       const picked = t?.phase === 'steal' && id === t.stealPick ? 'picked' : '';
-      return `<i class="mini ${decadeClass(y)} ${id === newId ? 'new' : ''} ${picked}" title="${y}">${y}</i>`;
+      const label = density === 'full' ? y : density === 'short' ? `’${String(y).slice(2)}` : '';
+      return `<i class="mini ${decadeClass(y)} ${id === newId ? 'new' : ''} ${picked}" title="${y}">${label}</i>`;
     })
     .join('');
   const steal = p.tokens >= G.STEAL_COST ? '<span class="seat-steal" title="Can steal a card">Steal</span>' : '';
-  // During a steal, other players' seats open their cards in the drawer under the table.
-  const pickable = t?.phase === 'steal' && pi !== g.current && G.stealableFrom(p);
-  const safe = t?.phase === 'steal' && pi !== g.current && !pickable;
-  const attrs = pickable
-    ? `role="button" tabindex="0" data-action="steal-open" data-pi="${pi}" aria-expanded="${ui.stealOpen === pi}"`
-    : '';
+  // Other players' seats open their cards in the drawer under the table; during a steal only
+  // seats you can actually steal from open.
+  const stealing = t?.phase === 'steal';
+  const pickable = stealing && pi !== g.current && G.stealableFrom(p);
+  const safe = stealing && pi !== g.current && !pickable;
+  const viewable = !stealing && pi !== g.current && n > 0;
+  const attrs =
+    pickable || viewable
+      ? `role="button" tabindex="0" data-action="steal-open" data-pi="${pi}" aria-expanded="${ui.stealOpen === pi}" title="Show ${esc(p.name)}’s cards"`
+      : '';
   return `
-    <div class="seat ${PLAYER_CLASS[pi]} ${pi === g.current ? 'active' : ''} ${pickable ? 'pickable' : ''} ${ui.stealOpen === pi ? 'open' : ''}" data-seat="${pi}" ${attrs} style="${seatPosition(pi, g.players.length, ui.tableSpin)}">
+    <div class="seat ${PLAYER_CLASS[pi]} ${pi === g.current ? 'active' : ''} ${pickable ? 'pickable' : ''} ${viewable ? 'viewable' : ''} ${ui.stealOpen === pi ? 'open' : ''}" data-seat="${pi}" ${attrs} style="${seatPosition(pi, g.players.length, ui.tableSpin)}">
       <div class="seat-head">${dot(pi)}<span class="seat-name">${esc(p.name)}</span>${
         safe ? '<span class="seat-safe" title="Last card can’t be stolen">Safe</span>' : steal
       }</div>
       <div class="seat-meta"><span><b>${p.timeline.length}</b> / ${g.settings.target}</span><span><span class="star">★</span> ${p.tokens}</span></div>
-      <div class="minis">${chips}</div>
+      <div class="minis ${density}">${chips}</div>
     </div>`;
 }
 
@@ -358,15 +373,20 @@ function tableView() {
 }
 
 // Which seat's cards are open during a steal. With only one player to steal from, it opens by itself.
+// Whose cards are open in the drawer. During a steal, only players you can steal from, and with
+// just one of them it opens by itself.
 function stealDrawerOwner(g) {
-  if (g.turn?.phase !== 'steal') {
+  const stealing = g.turn?.phase === 'steal';
+  const key = `${g.turnNumber}:${stealing}`;
+  if (ui.drawerKey !== key) {
+    ui.drawerKey = key;
     ui.stealOpen = null;
     ui.drawerShown = null;
-    return null;
   }
-  const targets = g.players.map((p, i) => i).filter((i) => i !== g.current && G.stealableFrom(g.players[i]));
-  if (ui.stealOpen === undefined) ui.stealOpen = null;
-  if (ui.stealOpen == null && targets.length === 1 && ui.drawerShown !== 'closed') ui.stealOpen = targets[0];
+  const targets = g.players
+    .map((p, i) => i)
+    .filter((i) => i !== g.current && (stealing ? G.stealableFrom(g.players[i]) : g.players[i].timeline.length > 0));
+  if (stealing && ui.stealOpen == null && targets.length === 1 && ui.drawerShown !== 'closed') ui.stealOpen = targets[0];
   return targets.includes(ui.stealOpen) ? ui.stealOpen : null;
 }
 

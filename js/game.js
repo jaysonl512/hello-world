@@ -11,7 +11,7 @@
 //    who has at least 2 cards (a player's last card is safe).
 //  - First to the target number of cards wins.
 
-import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=30';
+import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=31';
 
 export const STEAL_COST = 3;
 
