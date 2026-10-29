@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=28';
-import * as G from './game.js?v=28';
-import * as S from './spotify.js?v=28';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=29';
+import * as G from './game.js?v=29';
+import * as S from './spotify.js?v=29';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -332,13 +332,16 @@ function seat(pi) {
     .join('');
   const steal = p.tokens >= G.STEAL_COST ? '<span class="seat-steal" title="Can steal a card">Steal</span>' : '';
   // During a steal, other players' seats open their cards in the drawer under the table.
-  const pickable = t?.phase === 'steal' && pi !== g.current && p.timeline.length > 0;
+  const pickable = t?.phase === 'steal' && pi !== g.current && G.stealableFrom(p);
+  const safe = t?.phase === 'steal' && pi !== g.current && !pickable;
   const attrs = pickable
     ? `role="button" tabindex="0" data-action="steal-open" data-pi="${pi}" aria-expanded="${ui.stealOpen === pi}"`
     : '';
   return `
     <div class="seat ${PLAYER_CLASS[pi]} ${pi === g.current ? 'active' : ''} ${pickable ? 'pickable' : ''} ${ui.stealOpen === pi ? 'open' : ''}" data-seat="${pi}" ${attrs} style="${seatPosition(pi, g.players.length, ui.tableSpin)}">
-      <div class="seat-head">${dot(pi)}<span class="seat-name">${esc(p.name)}</span>${steal}</div>
+      <div class="seat-head">${dot(pi)}<span class="seat-name">${esc(p.name)}</span>${
+        safe ? '<span class="seat-safe" title="Last card can’t be stolen">Safe</span>' : steal
+      }</div>
       <div class="seat-meta"><span><b>${p.timeline.length}</b> / ${g.settings.target}</span><span><span class="star">★</span> ${p.tokens}</span></div>
       <div class="minis">${chips}</div>
     </div>`;
@@ -361,7 +364,7 @@ function stealDrawerOwner(g) {
     ui.drawerShown = null;
     return null;
   }
-  const targets = g.players.map((p, i) => i).filter((i) => i !== g.current && g.players[i].timeline.length);
+  const targets = g.players.map((p, i) => i).filter((i) => i !== g.current && G.stealableFrom(g.players[i]));
   if (ui.stealOpen === undefined) ui.stealOpen = null;
   if (ui.stealOpen == null && targets.length === 1 && ui.drawerShown !== 'closed') ui.stealOpen = targets[0];
   return targets.includes(ui.stealOpen) ? ui.stealOpen : null;
@@ -553,7 +556,7 @@ function rulesHtml() {
       <li>Each player starts with one card in their timeline and no tokens.</li>
       <li>Take turns around the table. On your turn a mystery song plays. Tap a <b>+</b> where you think it belongs, oldest on the left and newest on the right.</li>
       <li>Name the <b>artist and title</b> to earn <b>+1 ★</b>, even if you got the year wrong.</li>
-      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from another player’s timeline.</li>
+      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from another player’s timeline. A player’s <b>last card</b> can’t be stolen.</li>
       <li>First to the target number of cards wins.</li>
     </ol>`;
 }

@@ -7,10 +7,11 @@
 //    where you think its year fits.
 //  - Name the artist AND title to earn a token, whether or not the placement was right.
 //  - At the start of a turn, before the song plays, you may trade 3 tokens to steal any one
-//    card from any other player's timeline.
+//    card from any other player's timeline
+//    who has at least 2 cards (a player's last card is safe).
 //  - First to the target number of cards wins.
 
-import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=28';
+import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=29';
 
 export const STEAL_COST = 3;
 
@@ -58,9 +59,13 @@ export function newGame({ names, target, startTokens, decades, exclude = [] }) {
   return startTurn(state);
 }
 
+// A player down to their last card is safe: you can only steal from someone with 2 or more.
+export const MIN_CARDS_TO_STEAL_FROM = 2;
+export const stealableFrom = (p) => p.timeline.length >= MIN_CARDS_TO_STEAL_FROM;
+
 export const canSteal = (state) =>
   state.players[state.current].tokens >= STEAL_COST &&
-  state.players.some((p, i) => i !== state.current && p.timeline.length > 0);
+  state.players.some((p, i) => i !== state.current && stealableFrom(p));
 
 // A turn opens with the steal offer (only if affordable), then the song plays in 'listen'.
 function startTurn(state, { offerSteal = true } = {}) {
@@ -124,7 +129,8 @@ export function lockPlacement(state) {
 
 export function pickSteal(state, cardId) {
   const { turn } = state;
-  if (turn?.phase !== 'steal' || ownerOf(state, cardId) === -1) return state;
+  const owner = ownerOf(state, cardId);
+  if (turn?.phase !== 'steal' || owner === -1 || !stealableFrom(state.players[owner])) return state;
   return { ...state, turn: { ...turn, stealPick: turn.stealPick === cardId ? null : cardId } };
 }
 
@@ -133,7 +139,7 @@ export function confirmSteal(state) {
   if (turn?.phase !== 'steal' || turn.stealPick == null || !canSteal(state)) return state;
   const card = turn.stealPick;
   const owner = ownerOf(state, card);
-  if (owner === -1) return state;
+  if (owner === -1 || !stealableFrom(state.players[owner])) return state;
   let next = updatePlayer(state, owner, (p) => ({ ...p, timeline: p.timeline.filter((id) => id !== card) }));
   next = updatePlayer(next, current, (p) => ({
     ...p,

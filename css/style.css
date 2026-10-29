@@ -385,6 +385,18 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
 }
 .seat.pickable .seat-steal { display: none; }
 .seat.open .seat-head::after { transform: rotate(180deg); }
+.seat-safe {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0.15em 0.5em;
+}
 .mini.picked { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* The drawer under the table that shows one player's cards during a steal. */

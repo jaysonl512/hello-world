@@ -21,7 +21,7 @@ cards wins.
 3. Name the **artist and title** to earn **+1 ★**, even if you got the year wrong. The host
    taps the button on the reveal screen.
 4. At the **start of your turn, before the song plays**, you can trade **3 ★** to **steal any
-   card** you choose from any other player's timeline. Tokens earned on a turn can only be
+   card** you choose from any other player's timeline. A player's last card can't be stolen. Tokens earned on a turn can only be
    spent on a later turn.
 5. First to the target (default 10 cards) wins.
 
