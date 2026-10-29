@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=29';
-import * as G from './game.js?v=29';
-import * as S from './spotify.js?v=29';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=30';
+import * as G from './game.js?v=30';
+import * as S from './spotify.js?v=30';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -602,9 +602,9 @@ function setupScreen() {
       </header>
       <div class="setup-grid">
         <section class="panel">
-          <h3 class="panel-title">Players</h3>
-          <label class="field first"><span class="field-label">Players or teams</span>
-            <select id="players">${[2, 3, 4, 5].map((n) => `<option ${n === s.players ? 'selected' : ''}>${n}</option>`).join('')}</select>
+          <label class="players-head">
+            <h3 class="panel-title">Players or teams</h3>
+            <select id="players" aria-label="Number of players or teams">${[2, 3, 4, 5].map((n) => `<option ${n === s.players ? 'selected' : ''}>${n}</option>`).join('')}</select>
           </label>
           <div class="names">
             ${Array.from({ length: s.players }, (_, i) =>

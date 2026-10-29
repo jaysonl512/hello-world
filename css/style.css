@@ -195,8 +195,9 @@ select option { background: var(--surface); color: var(--text); }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
 
 .names { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.75rem; }
-.field.first { margin-top: 0; }
-.field.first select { width: auto; min-width: 6rem; }
+.players-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.players-head .panel-title { margin: 0; }
+.players-head select { width: auto; min-width: 5.5rem; height: 2.6rem; }
 .name-input,
 #client-id,
 select {
