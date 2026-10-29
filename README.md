@@ -1,13 +1,14 @@
 # Hitline: a Hitster-style music timeline game
 
-A two-player music timeline game for your TV, powered by Spotify. A mystery song plays and you
+A music timeline game for 2–5 players or teams, for your TV, powered by Spotify. A mystery song plays and you
 place it in your timeline of cards. Get the year order right and you keep the card. First to 10
 cards wins.
 
 - **1,366 songs from 336 artists, 50s → today**: big artists (usually five songs each), 90s/2000s rock, and well-known one-hit wonders. Includes
   a few 50s classics like Chuck Berry and Johnny Cash's "I Walk the Line".
-- **TV-sized cards and scoreboard**: card counts, progress bars, ★ tokens, and both timelines
-  on screen the whole time.
+- **The table**: every player has a seat around an oval table showing their cards (as small
+  year chips), card count and ★ tokens. The current player sits at the front, and the table
+  turns to the next player each turn. Their full timeline sits below for placing the song.
 - **Plays through Spotify**: in the browser tab (cast the tab and the audio goes with it) or on
   any Spotify Connect device, such as the Spotify app on your TV.
 - **Saves the game**: refresh or close the tab and you can resume where you left off.
@@ -20,7 +21,7 @@ cards wins.
 3. Name the **artist and title** to earn **+1 ★**, even if you got the year wrong. The host
    taps the button on the reveal screen.
 4. At the **start of your turn, before the song plays**, you can trade **3 ★** to **steal any
-   card** you choose from your opponent's timeline. Tokens earned on a turn can only be
+   card** you choose from any other player's timeline. Tokens earned on a turn can only be
    spent on a later turn.
 5. First to the target (default 10 cards) wins.
 

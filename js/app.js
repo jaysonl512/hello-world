@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=23';
-import * as G from './game.js?v=23';
-import * as S from './spotify.js?v=23';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=25';
+import * as G from './game.js?v=25';
+import * as S from './spotify.js?v=25';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -28,13 +28,18 @@ const esc = (s) =>
 const ui = {
   screen: 'setup',
   game: null,
-  setup: load(SETUP_KEY, { names: ['Player 1', 'Player 2'], target: 10, startTokens: 0, decades: [...DECADES] }),
+  setup: load(SETUP_KEY, { names: ['Player 1', 'Player 2'], players: 2, target: 10, startTokens: 0, decades: [...DECADES] }),
   spotify: { connected: S.isLoggedIn(), profile: null, error: null, busy: false },
   music: { songId: null, status: 'off', error: null },
   modal: null, // 'settings' | 'rules'
   setupError: null,
   animatedTurn: null,
+  tableSpin: null, // which seat is at the front of the table (see tableView)
 };
+
+// Older setups only had two names; keep a name for every possible seat.
+ui.setup.players ??= 2;
+ui.setup.names = Array.from({ length: G.MAX_PLAYERS }, (_, i) => ui.setup.names?.[i] || `Player ${i + 1}`);
 
 // Setups saved before the 50s option existed had those songs inside the 60s, so keep them in.
 if (!ui.setup.decades.includes(1950) && ui.setup.decades.includes(1960) && !ui.setup.has50s) ui.setup.decades.unshift(1950);
@@ -145,7 +150,7 @@ async function refreshSpotify() {
 
 const decadeClass = (year) => `d${Math.max(1950, decadeOf(year))}`;
 const decadeLabel = (d) => `${String(d).slice(2)}s`;
-const PLAYER_CLASS = ['p0', 'p1'];
+const PLAYER_CLASS = ['p0', 'p1', 'p2', 'p3', 'p4'];
 const dot = (pi) => `<i class="dot ${PLAYER_CLASS[pi]}"></i>`;
 const logo = (cls = '') => `<div class="logo ${cls}">HIT<span>LINE</span></div>`;
 const ICON = {
@@ -156,8 +161,9 @@ const ICON = {
 };
 
 // "Jay's turn · Round 2": a round is one turn for each player.
+const roundOf = (g) => Math.ceil(g.turnNumber / g.players.length);
 const turnLabel = (g) =>
-  `<div class="eyebrow">${dot(g.current)}${esc(g.players[g.current].name)}’s turn · Round ${Math.ceil(g.turnNumber / 2)}</div>`;
+  `<div class="eyebrow">${dot(g.current)}${esc(g.players[g.current].name)}’s turn · Round ${roundOf(g)}</div>`;
 
 function card(id, { cls = '' } = {}) {
   const s = G.song(id);
@@ -206,8 +212,7 @@ function timelineRow(pi, { plain = false } = {}) {
   const p = g.players[pi];
   const t = plain ? null : g.turn;
   const isActive = pi === g.current;
-  const opp = G.opponentOf(g);
-  const stealing = t?.phase === 'steal' && pi === opp;
+  const stealing = t?.phase === 'steal' && !isActive;
   const n = p.timeline.length;
   const newId = t?.phase === 'reveal' ? t.songId : t?.phase !== 'steal' ? t?.stolen : null;
   const parts = [];
@@ -240,7 +245,7 @@ function timelineRow(pi, { plain = false } = {}) {
     gap(start);
     const ids = p.timeline.slice(start, end);
     if (stealing) {
-      // Opponent's cards are pickable during the steal step.
+      // Other players' cards are pickable during the steal step.
       const id = ids[0];
       const picked = id === t.stealPick ? 'picked' : '';
       parts.push(`<button class="pick ${picked}" data-action="steal-pick" data-id="${esc(id)}">${card(id)}</button>`);
@@ -265,20 +270,80 @@ function timelineRow(pi, { plain = false } = {}) {
     </section>`;
 }
 
-function scorePanel(pi) {
+// ---------- The table ----------
+// Every player has a seat around an oval table showing their cards as small year chips. The
+// current player sits at the front (bottom); when the turn passes, the table turns so the next
+// player's seat glides to the front. `ui.tableSpin` is the seat index currently at the front
+// (fractional mid-animation, and it only ever counts upward so the table always turns one way).
+
+const mod = (a, n) => ((a % n) + n) % n;
+let spinAnim = null;
+
+function seatPosition(i, n, spin) {
+  const angle = ((90 + (i - spin) * (360 / n)) * Math.PI) / 180;
+  // Seats sit just inside the oval so the side seats don't run off the screen.
+  return `left:${(50 + 31 * Math.cos(angle)).toFixed(2)}%;top:${(50 + 37 * Math.sin(angle)).toFixed(2)}%`;
+}
+
+// Called on every render: start a turn of the table if the current player changed.
+function syncTableSpin(g) {
+  const n = g.players.length;
+  if (ui.tableSpin == null) {
+    ui.tableSpin = g.current;
+    return;
+  }
+  const base = spinAnim ? spinAnim.to : ui.tableSpin;
+  const steps = mod(g.current - base, n);
+  if (!steps) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) {
+    ui.tableSpin = base + steps;
+    spinAnim = null;
+    return;
+  }
+  spinAnim = { from: ui.tableSpin, to: base + steps, start: performance.now(), duration: 900 };
+  requestAnimationFrame(stepSpin);
+}
+
+function stepSpin(now) {
+  if (!spinAnim) return;
+  const p = Math.min(1, (now - spinAnim.start) / spinAnim.duration);
+  const eased = p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
+  ui.tableSpin = spinAnim.from + (spinAnim.to - spinAnim.from) * eased;
+  const seats = document.querySelectorAll('.table .seat');
+  seats.forEach((el) => el.setAttribute('style', seatPosition(Number(el.dataset.seat), seats.length, ui.tableSpin)));
+  if (p < 1) requestAnimationFrame(stepSpin);
+  else spinAnim = null;
+}
+
+function seat(pi) {
   const g = ui.game;
   const p = g.players[pi];
-  const pct = Math.min(100, (p.timeline.length / g.settings.target) * 100);
-  const steal = p.tokens >= G.STEAL_COST ? '<span class="steal-ready">Steal ready</span>' : '';
+  const t = g.turn;
+  const newId = t?.phase === 'reveal' ? t.songId : t?.stolen;
+  const chips = p.timeline
+    .map((id) => {
+      const y = G.yearOf(id);
+      return `<i class="mini ${decadeClass(y)} ${id === newId ? 'new' : ''}" title="${y}">${y}</i>`;
+    })
+    .join('');
+  const steal = p.tokens >= G.STEAL_COST ? '<span class="seat-steal" title="Can steal a card">Steal</span>' : '';
   return `
-    <div class="score ${PLAYER_CLASS[pi]} ${g.current === pi && g.winner == null ? 'turn' : ''}">
-      <div class="score-head">${dot(pi)}<span class="score-name">${esc(p.name)}</span>${steal}</div>
-      <div class="score-stats">
-        <span><b>${p.timeline.length}</b> / ${g.settings.target}</span>
-        <span class="tokens" title="Tokens"><span class="star">★</span> ${p.tokens}</span>
-      </div>
-      <div class="progress"><i style="width:${pct}%"></i></div>
+    <div class="seat ${PLAYER_CLASS[pi]} ${pi === g.current ? 'active' : ''}" data-seat="${pi}" style="${seatPosition(pi, g.players.length, ui.tableSpin)}">
+      <div class="seat-head">${dot(pi)}<span class="seat-name">${esc(p.name)}</span>${steal}</div>
+      <div class="seat-meta"><span><b>${p.timeline.length}</b> / ${g.settings.target}</span><span><span class="star">★</span> ${p.tokens}</span></div>
+      <div class="minis">${chips}</div>
     </div>`;
+}
+
+function tableView() {
+  const g = ui.game;
+  syncTableSpin(g);
+  return `
+    <section class="table" data-n="${g.players.length}" aria-label="Table">
+      <div class="felt"><span class="felt-round">Round ${roundOf(g)}</span></div>
+      ${g.players.map((_, i) => seat(i)).join('')}
+    </section>`;
 }
 
 function musicBar() {
@@ -319,7 +384,8 @@ function stage() {
   const g = ui.game;
   const t = g.turn;
   const a = g.players[g.current];
-  const o = g.players[G.opponentOf(g)];
+  const o = g.players[G.nextPlayer(g)];
+  const others = g.players.length === 2 ? `${esc(o.name)}’s timeline` : 'any other player’s timeline';
 
   if (t.phase === 'reveal') {
     const animate = ui.animatedTurn !== g.turnNumber;
@@ -361,7 +427,7 @@ function stage() {
       <button class="btn tertiary skip" data-action="replace-song">Skip song</button>`;
   } else {
     heading = '<h2>Steal a card?</h2>';
-    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${esc(o.name)}’s timeline${
+    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${others}${
       t.stealPick ? '.' : '. Tap the one you want.'
     } The song plays after this.</p>`;
     actions = `
@@ -426,9 +492,9 @@ function rulesHtml() {
     <h3 class="modal-title">How to play</h3>
     <ol class="rules">
       <li>Each player starts with one card in their timeline and no tokens.</li>
-      <li>On your turn a mystery song plays. Tap a <b>+</b> where you think it belongs, oldest on the left and newest on the right.</li>
+      <li>Take turns around the table. On your turn a mystery song plays. Tap a <b>+</b> where you think it belongs, oldest on the left and newest on the right.</li>
       <li>Name the <b>artist and title</b> to earn <b>+1 ★</b>, even if you got the year wrong.</li>
-      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from your opponent’s timeline.</li>
+      <li>At the start of your turn, before the song plays, trade <b>${G.STEAL_COST} ★</b> to <b>steal any card</b> from another player’s timeline.</li>
       <li>First to the target number of cards wins.</li>
     </ol>`;
 }
@@ -475,10 +541,13 @@ function setupScreen() {
       <div class="setup-grid">
         <section class="panel">
           <h3 class="panel-title">Players</h3>
+          <label class="field first"><span class="field-label">Players or teams</span>
+            <select id="players">${[2, 3, 4, 5].map((n) => `<option ${n === s.players ? 'selected' : ''}>${n}</option>`).join('')}</select>
+          </label>
           <div class="names">
-            <label class="name-input">${dot(0)}<input id="name0" maxlength="16" value="${esc(s.names[0])}" placeholder="Player 1" aria-label="Player 1 name"></label>
-            <span class="vs">vs</span>
-            <label class="name-input">${dot(1)}<input id="name1" maxlength="16" value="${esc(s.names[1])}" placeholder="Player 2" aria-label="Player 2 name"></label>
+            ${Array.from({ length: s.players }, (_, i) =>
+              `<label class="name-input">${dot(i)}<input id="name${i}" maxlength="16" value="${esc(s.names[i])}" placeholder="Player ${i + 1}" aria-label="Player ${i + 1} name"></label>`,
+            ).join('')}
           </div>
           <div class="two">
             <label class="field"><span class="field-label">Cards to win</span>
@@ -517,11 +586,13 @@ function gameScreen() {
           <button class="icon" data-action="settings" title="Settings" aria-label="Settings">⚙</button>
         </div>
       </header>
-      <div class="scores">${scorePanel(0)}${scorePanel(1)}</div>
-      ${stage()}
+      <div class="board">
+        ${tableView()}
+        ${stage()}
+      </div>
       <div class="rows">
+        ${g.turn.phase === 'steal' ? g.players.map((p, i) => (i !== g.current && p.timeline.length ? timelineRow(i) : '')).join('') : ''}
         ${timelineRow(g.current)}
-        ${timelineRow(G.opponentOf(g))}
       </div>
     </main>`;
 }
@@ -538,7 +609,7 @@ function winnerScreen() {
       <div class="eyebrow center">Game over</div>
       <h1>${w === 'tie' ? '' : dot(w)}${title}</h1>
       <p class="tagline">${g.players.map((p) => `${esc(p.name)} · ${p.timeline.length} cards`).join('&emsp;')}</p>
-      <div class="rows">${timelineRow(0, { plain: true })}${timelineRow(1, { plain: true })}</div>
+      <div class="rows">${g.players.map((_, i) => timelineRow(i, { plain: true })).join('')}</div>
       <div class="actions center">
         <button class="btn primary big" data-action="rematch">Rematch</button>
         <button class="btn secondary big" data-action="quit">New setup</button>
@@ -559,7 +630,9 @@ function readSetupForm() {
   if (!document.getElementById('name0')) return;
   ui.setup = {
     ...ui.setup,
-    names: [val('name0').trim() || 'Player 1', val('name1').trim() || 'Player 2'],
+    players: Number(val('players')) || ui.setup.players,
+    // Names of seats not currently shown are kept for when the player count goes back up.
+    names: ui.setup.names.map((name, i) => (document.getElementById(`name${i}`) ? val(`name${i}`).trim() || `Player ${i + 1}` : name)),
     target: Number(val('target')),
     startTokens: Number(val('tokens')),
   };
@@ -572,7 +645,8 @@ function startGame(extra = {}) {
     ui.screen = 'game';
     ui.savedGame = null;
     S.unlockAudio();
-    setGame(G.newGame({ ...ui.setup, ...extra }));
+    ui.tableSpin = null; // a new game starts with the first player at the front, no spin
+    setGame(G.newGame({ ...ui.setup, names: ui.setup.names.slice(0, ui.setup.players), ...extra }));
   } catch (err) {
     ui.screen = 'setup';
     ui.setupError = err.message;
@@ -591,6 +665,7 @@ const actions = {
     const g = ui.savedGame;
     ui.savedGame = null;
     ui.game = null;
+    ui.tableSpin = null;
     setGame(g);
     if (g.turn.phase === 'reveal') playCurrent();
   },
@@ -711,7 +786,10 @@ app.addEventListener('click', (e) => {
 });
 
 app.addEventListener('change', (e) => {
-  if (['name0', 'name1', 'target', 'tokens'].includes(e.target.id)) {
+  if (e.target.id === 'players') {
+    readSetupForm();
+    render();
+  } else if (/^name\d$/.test(e.target.id) || ['target', 'tokens'].includes(e.target.id)) {
     readSetupForm();
   }
 });

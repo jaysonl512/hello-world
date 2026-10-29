@@ -1,15 +1,16 @@
 // Pure game rules. State is a plain JSON object so it can be saved to localStorage and
 // survive a page refresh mid-game.
 //
-// Rules (2 players, house rules):
+// Rules (2-5 players or teams, house rules):
 //  - Each player starts with one face-up card in their timeline and no tokens.
-//  - On your turn a mystery song plays. Place it in your timeline where you think its year fits.
+//  - Turns go around in order. On your turn a mystery song plays; place it in your timeline
+//    where you think its year fits.
 //  - Name the artist AND title to earn a token, whether or not the placement was right.
 //  - At the start of a turn, before the song plays, you may trade 3 tokens to steal any one
-//    card from your opponent's timeline.
+//    card from any other player's timeline.
 //  - First to the target number of cards wins.
 
-import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=23';
+import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=25';
 
 export const STEAL_COST = 3;
 
@@ -24,7 +25,11 @@ const shuffle = (arr) => {
 
 export const song = (id) => SONGS_BY_ID[id];
 export const yearOf = (id) => SONGS_BY_ID[id].year;
-export const opponentOf = (state) => 1 - state.current;
+export const MAX_PLAYERS = 5;
+export const nextPlayer = (state) => (state.current + 1) % state.players.length;
+// The player (other than the current one) who holds this card, or -1.
+const ownerOf = (state, cardId) =>
+  state.players.findIndex((p, i) => i !== state.current && p.timeline.includes(cardId));
 
 export function deckFor(decades) {
   return SONGS.filter((s) => decades.includes(decadeBucket(s.year))).map((s) => s.id);
@@ -34,7 +39,8 @@ export function deckFor(decades) {
 // would be left, the whole pool is used again so the game can still be played.
 export function newGame({ names, target, startTokens, decades, exclude = [] }) {
   const pool = deckFor(decades);
-  const minCards = target * 2 + 2;
+  // Enough for every player to reach the target, plus their starting cards.
+  const minCards = target * names.length + names.length;
   if (pool.length < minCards) throw new Error(`Pick more decades: need at least ${minCards} songs, have ${pool.length}.`);
   const skip = new Set(exclude);
   const unheard = pool.filter((id) => !skip.has(id));
@@ -44,7 +50,7 @@ export function newGame({ names, target, startTokens, decades, exclude = [] }) {
     settings: { target, startTokens, decades },
     players: names.map((name) => ({ name, timeline: [deck.pop()], tokens: startTokens })),
     deck,
-    current: Math.floor(Math.random() * 2),
+    current: Math.floor(Math.random() * names.length),
     turn: null,
     winner: null,
     turnNumber: 0,
@@ -53,7 +59,8 @@ export function newGame({ names, target, startTokens, decades, exclude = [] }) {
 }
 
 export const canSteal = (state) =>
-  state.players[state.current].tokens >= STEAL_COST && state.players[opponentOf(state)].timeline.length > 0;
+  state.players[state.current].tokens >= STEAL_COST &&
+  state.players.some((p, i) => i !== state.current && p.timeline.length > 0);
 
 // A turn opens with the steal offer (only if affordable), then the song plays in 'listen'.
 function startTurn(state, { offerSteal = true } = {}) {
@@ -89,9 +96,11 @@ const updatePlayer = (state, idx, fn) => ({
   players: state.players.map((p, i) => (i === idx ? fn(p) : p)),
 });
 
+// Used when the deck runs out: most cards wins, or 'tie' if several share the lead.
 const leader = (state) => {
-  const [a, b] = state.players.map((p) => p.timeline.length);
-  return a === b ? 'tie' : a > b ? 0 : 1;
+  const counts = state.players.map((p) => p.timeline.length);
+  const best = Math.max(...counts);
+  return counts.filter((c) => c === best).length > 1 ? 'tie' : counts.indexOf(best);
 };
 
 export function choosePlacement(state, i) {
@@ -115,7 +124,7 @@ export function lockPlacement(state) {
 
 export function pickSteal(state, cardId) {
   const { turn } = state;
-  if (turn?.phase !== 'steal' || !state.players[opponentOf(state)].timeline.includes(cardId)) return state;
+  if (turn?.phase !== 'steal' || ownerOf(state, cardId) === -1) return state;
   return { ...state, turn: { ...turn, stealPick: turn.stealPick === cardId ? null : cardId } };
 }
 
@@ -123,7 +132,9 @@ export function confirmSteal(state) {
   const { turn, current } = state;
   if (turn?.phase !== 'steal' || turn.stealPick == null || !canSteal(state)) return state;
   const card = turn.stealPick;
-  let next = updatePlayer(state, opponentOf(state), (p) => ({ ...p, timeline: p.timeline.filter((id) => id !== card) }));
+  const owner = ownerOf(state, card);
+  if (owner === -1) return state;
+  let next = updatePlayer(state, owner, (p) => ({ ...p, timeline: p.timeline.filter((id) => id !== card) }));
   next = updatePlayer(next, current, (p) => ({
     ...p,
     tokens: p.tokens - STEAL_COST,
@@ -140,7 +151,8 @@ export function declineSteal(state) {
 function checkWinner(state) {
   const { target } = state.settings;
   // The active player wins ties on reaching the target, since they earned it on their turn.
-  const order = [state.current, opponentOf(state)];
+  const n = state.players.length;
+  const order = Array.from({ length: n }, (_, k) => (state.current + k) % n);
   const winner = order.find((i) => state.players[i].timeline.length >= target);
   return winner == null ? state : { ...state, winner };
 }
@@ -169,5 +181,5 @@ export function replaceSong(state) {
 
 export function nextTurn(state) {
   if (state.turn?.phase !== 'reveal' || state.winner != null) return state;
-  return startTurn({ ...state, current: opponentOf(state) });
+  return startTurn({ ...state, current: nextPlayer(state) });
 }
