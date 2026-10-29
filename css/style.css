@@ -367,6 +367,34 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
 .seat-meta { display: flex; justify-content: space-between; margin: 0.2rem 0 0.45rem; color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .seat-meta b { color: var(--text); font-weight: 800; }
 .star { color: var(--accent); }
+/* Steal step: other players' seats can be tapped to open their cards. */
+.seat.pickable { cursor: pointer; border-color: rgba(233, 111, 69, 0.45); transition: border-color 0.2s, transform 0.15s; }
+.seat.pickable:hover { border-color: var(--accent); }
+.seat.pickable:active { transform: translate(-50%, -50%) scale(0.97); }
+.seat.pickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seat.open { border-color: var(--accent); background: var(--raised); z-index: 2; }
+.seat.pickable .seat-head::after {
+  content: '▾';
+  margin-left: auto;
+  padding-left: 0.3rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  transition: transform 0.25s;
+}
+.seat.pickable .seat-steal { display: none; }
+.seat.open .seat-head::after { transform: rotate(180deg); }
+.mini.picked { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The drawer under the table that shows one player's cards during a steal. */
+.table-col { min-width: 0; width: 100%; }
+.drawer { display: grid; grid-template-rows: 1fr; }
+.drawer-inner { min-height: 0; overflow: hidden; }
+.drawer .row { margin-top: 0.25rem; }
+.drawer.opening { animation: drawerOpen 0.32s cubic-bezier(0.25, 0.8, 0.3, 1); }
+.drawer.closing { animation: drawerClose 0.22s ease-in forwards; }
+@keyframes drawerOpen { from { grid-template-rows: 0fr; opacity: 0; } to { grid-template-rows: 1fr; opacity: 1; } }
+@keyframes drawerClose { from { grid-template-rows: 1fr; opacity: 1; } to { grid-template-rows: 0fr; opacity: 0; } }
+
 /* Each card as a small year chip in its decade color, in timeline order. */
 .minis { display: flex; flex-wrap: wrap; gap: 3px; }
 .mini {

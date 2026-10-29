@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=25';
-import * as G from './game.js?v=25';
-import * as S from './spotify.js?v=25';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=27';
+import * as G from './game.js?v=27';
+import * as S from './spotify.js?v=27';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -35,6 +35,8 @@ const ui = {
   setupError: null,
   animatedTurn: null,
   tableSpin: null, // which seat is at the front of the table (see tableView)
+  stealOpen: null, // during a steal: whose cards are open in the drawer under the table
+  drawerShown: null, // whose drawer was last drawn, so the open animation plays only once
 };
 
 // Older setups only had two names; keep a name for every possible seat.
@@ -324,12 +326,18 @@ function seat(pi) {
   const chips = p.timeline
     .map((id) => {
       const y = G.yearOf(id);
-      return `<i class="mini ${decadeClass(y)} ${id === newId ? 'new' : ''}" title="${y}">${y}</i>`;
+      const picked = t?.phase === 'steal' && id === t.stealPick ? 'picked' : '';
+      return `<i class="mini ${decadeClass(y)} ${id === newId ? 'new' : ''} ${picked}" title="${y}">${y}</i>`;
     })
     .join('');
   const steal = p.tokens >= G.STEAL_COST ? '<span class="seat-steal" title="Can steal a card">Steal</span>' : '';
+  // During a steal, other players' seats open their cards in the drawer under the table.
+  const pickable = t?.phase === 'steal' && pi !== g.current && p.timeline.length > 0;
+  const attrs = pickable
+    ? `role="button" tabindex="0" data-action="steal-open" data-pi="${pi}" aria-expanded="${ui.stealOpen === pi}"`
+    : '';
   return `
-    <div class="seat ${PLAYER_CLASS[pi]} ${pi === g.current ? 'active' : ''}" data-seat="${pi}" style="${seatPosition(pi, g.players.length, ui.tableSpin)}">
+    <div class="seat ${PLAYER_CLASS[pi]} ${pi === g.current ? 'active' : ''} ${pickable ? 'pickable' : ''} ${ui.stealOpen === pi ? 'open' : ''}" data-seat="${pi}" ${attrs} style="${seatPosition(pi, g.players.length, ui.tableSpin)}">
       <div class="seat-head">${dot(pi)}<span class="seat-name">${esc(p.name)}</span>${steal}</div>
       <div class="seat-meta"><span><b>${p.timeline.length}</b> / ${g.settings.target}</span><span><span class="star">★</span> ${p.tokens}</span></div>
       <div class="minis">${chips}</div>
@@ -344,6 +352,54 @@ function tableView() {
       <div class="felt"><span class="felt-round">Round ${roundOf(g)}</span></div>
       ${g.players.map((_, i) => seat(i)).join('')}
     </section>`;
+}
+
+// Which seat's cards are open during a steal. With only one player to steal from, it opens by itself.
+function stealDrawerOwner(g) {
+  if (g.turn?.phase !== 'steal') {
+    ui.stealOpen = null;
+    ui.drawerShown = null;
+    return null;
+  }
+  const targets = g.players.map((p, i) => i).filter((i) => i !== g.current && g.players[i].timeline.length);
+  if (ui.stealOpen === undefined) ui.stealOpen = null;
+  if (ui.stealOpen == null && targets.length === 1 && ui.drawerShown !== 'closed') ui.stealOpen = targets[0];
+  return targets.includes(ui.stealOpen) ? ui.stealOpen : null;
+}
+
+function stealDrawer(g) {
+  const pi = stealDrawerOwner(g);
+  if (pi == null) {
+    if (ui.drawerShown !== 'closed') ui.drawerShown = null;
+    return '';
+  }
+  const opening = ui.drawerShown !== pi;
+  ui.drawerShown = pi;
+  return `
+    <div class="drawer ${opening ? 'opening' : ''}" data-pi="${pi}">
+      <div class="drawer-inner">${timelineRow(pi)}</div>
+    </div>`;
+}
+
+let drawerBusy = false;
+// Opens a seat's cards (or closes them if already open), letting an open drawer slide shut first.
+function toggleStealDrawer(pi) {
+  if (drawerBusy) return;
+  const next = ui.stealOpen === pi ? null : pi;
+  const open = document.querySelector('.drawer');
+  const finish = () => {
+    drawerBusy = false;
+    ui.stealOpen = next;
+    if (next == null) ui.drawerShown = 'closed'; // don't auto-reopen after a manual close
+    render();
+  };
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (open && !reduce) {
+    drawerBusy = true;
+    open.classList.remove('opening');
+    open.classList.add('closing');
+    setTimeout(finish, 220);
+  } else finish();
 }
 
 function musicBar() {
@@ -427,9 +483,12 @@ function stage() {
       <button class="btn tertiary skip" data-action="replace-song">Skip song</button>`;
   } else {
     heading = '<h2>Steal a card?</h2>';
-    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${others}${
-      t.stealPick ? '.' : '. Tap the one you want.'
-    } The song plays after this.</p>`;
+    const tip = t.stealPick
+      ? 'Got it. Steal it, or pick a different card.'
+      : g.players.length === 2
+        ? 'Tap the card you want.'
+        : 'Tap a player at the table to see their cards, then tap the one you want.';
+    body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${others}. ${tip} The song plays after this.</p>`;
     actions = `
       <button class="btn primary" data-action="confirm-steal" ${t.stealPick == null ? 'disabled' : ''}>Steal it (−${G.STEAL_COST} ★)</button>
       <button class="btn secondary" data-action="decline-steal">Not now, play the song</button>`;
@@ -587,11 +646,10 @@ function gameScreen() {
         </div>
       </header>
       <div class="board">
-        ${tableView()}
+        <div class="table-col">${tableView()}${stealDrawer(g)}</div>
         ${stage()}
       </div>
       <div class="rows">
-        ${g.turn.phase === 'steal' ? g.players.map((p, i) => (i !== g.current && p.timeline.length ? timelineRow(i) : '')).join('') : ''}
         ${timelineRow(g.current)}
       </div>
     </main>`;
@@ -686,6 +744,7 @@ const actions = {
   place: (el) => setGame(G.choosePlacement(ui.game, Number(el.dataset.i))),
   lock: () => setGame(G.lockPlacement(ui.game)),
   'steal-pick': (el) => setGame(G.pickSteal(ui.game, el.dataset.id)),
+  'steal-open': (el) => toggleStealDrawer(Number(el.dataset.pi)),
   'confirm-steal'() {
     S.unlockAudio();
     const next = G.confirmSteal(ui.game);
@@ -796,6 +855,11 @@ app.addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, select, textarea')) return;
+  // Seats act as buttons during a steal.
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button][data-action]')) {
+    e.preventDefault();
+    return e.target.click();
+  }
   if (e.key === 'Escape' && ui.modal) {
     ui.modal = null;
     render();
