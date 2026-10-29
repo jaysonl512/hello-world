@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=22';
-import * as G from './game.js?v=22';
-import * as S from './spotify.js?v=22';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=23';
+import * as G from './game.js?v=23';
+import * as S from './spotify.js?v=23';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
@@ -74,7 +74,7 @@ async function playCurrent() {
     ui.music = { songId, status: 'playing', error: null, device };
   } catch (err) {
     if (ui.game?.turn?.songId !== songId) return;
-    ui.music = { songId, status: 'error', error: err.message, notFound: !!err.notFound };
+    ui.music = { songId, status: 'error', error: err.message };
   }
   render();
   prefetchNext();
@@ -296,10 +296,6 @@ function musicBar() {
     error: esc(m.error ?? 'Playback failed'),
     off: 'Ready',
   }[m.status];
-  const errorFix =
-    m.status === 'error' && m.notFound && ui.game?.turn?.phase === 'listen'
-      ? `<button class="btn tertiary small" data-action="replace-song">Swap song</button>`
-      : '';
   // On phones the Spotify app often needs to be opened to wake it up.
   const openApp =
     m.status === 'error' && !S.browserPlaybackSupported ? `<a class="btn tertiary small" href="spotify:">Open Spotify</a>` : '';
@@ -309,7 +305,7 @@ function musicBar() {
       <div class="music-actions">
         <button class="btn tertiary small" data-action="toggle-music">${m.status === 'playing' ? `${ICON.pause}Pause` : `${ICON.play}Play`}</button>
         <button class="btn tertiary small" data-action="restart-music" aria-label="Restart song">${ICON.restart}<span class="lbl">Restart</span></button>
-        ${openApp}${errorFix}
+        ${openApp}
       </div>
     </div>`;
 }
@@ -360,7 +356,9 @@ function stage() {
     body = `
       <p class="hint">${t.place == null ? 'Place the mystery song somewhere in your timeline.' : 'Happy with that spot? Lock it in.'}</p>
       <p class="hint subtle">Name the artist and title for +1 ★</p>`;
-    actions = `<button class="btn primary" data-action="lock" ${t.place == null ? 'disabled' : ''}>Lock it in</button>`;
+    actions = `
+      <button class="btn primary" data-action="lock" ${t.place == null ? 'disabled' : ''}>Lock it in</button>
+      <button class="btn tertiary skip" data-action="replace-song">Skip song</button>`;
   } else {
     heading = '<h2>Steal a card?</h2>';
     body = `<p class="hint">You have ${a.tokens} ★. Trade ${G.STEAL_COST} to take any card from ${esc(o.name)}’s timeline${
@@ -568,13 +566,13 @@ function readSetupForm() {
   store(SETUP_KEY, ui.setup);
 }
 
-function startGame() {
+function startGame(extra = {}) {
   try {
     ui.setupError = null;
     ui.screen = 'game';
     ui.savedGame = null;
     S.unlockAudio();
-    setGame(G.newGame(ui.setup));
+    setGame(G.newGame({ ...ui.setup, ...extra }));
   } catch (err) {
     ui.screen = 'setup';
     ui.setupError = err.message;
@@ -598,7 +596,8 @@ const actions = {
   },
   rematch() {
     ui.screen = 'game';
-    startGame();
+    // Don't replay any song from the previous game(s).
+    startGame({ exclude: G.usedSongs(ui.game) });
   },
   decade(el) {
     readSetupForm();

@@ -216,9 +216,7 @@ export async function findTrack(song) {
   }
   if (!best || best.score < 5) {
     // Don't name the song: the message is on screen while everyone is guessing.
-    const err = new Error("Couldn't find this song on Spotify. Tap Swap song for another one.");
-    err.notFound = true;
-    throw err;
+    throw new Error("Couldn't find this song on Spotify. Tap Skip song for another one.");
   }
   trackCache[song.id] = { uri: best.uri, album: best.album };
   save(LS.trackCache, trackCache);
@@ -344,11 +342,9 @@ export async function playTrack({ uri, album }) {
   // "this album, starting at this track", so it gets the album form.
   await sendPlay(deviceId, album ? { context_uri: album, offset: { uri }, position_ms: 0 } : { uris: [uri], position_ms: 0 });
   if (await waitForPlaying(uri, deviceId, 12)) return name;
-  const err = new Error(
-    `Spotify on ${name} didn't start the song. ${await describePlayer(uri, deviceId)} Tap ▶ Play to try again, or Swap song.`,
+  throw new Error(
+    `Spotify on ${name} didn't start the song. ${await describePlayer(uri, deviceId)} Tap ▶ Play to try again, or Skip song.`,
   );
-  err.notFound = true; // the track itself may be the problem, so offer a free swap
-  throw err;
 }
 
 export async function pause() {

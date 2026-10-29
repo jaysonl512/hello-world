@@ -718,6 +718,7 @@ code.copy.copied::after { content: '  ✓ Copied'; color: var(--live); font-fami
   .eyebrow { justify-content: center; }
   .stage .actions { justify-content: center; }
   .stage .actions .btn { flex: 1 1 100%; }
+  .stage .actions .btn.skip { flex: 0 1 auto; margin: -0.25rem auto 0; }
   .btn.toggle { text-align: center; }
 
   .row {

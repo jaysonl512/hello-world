@@ -9,7 +9,7 @@
 //    card from your opponent's timeline.
 //  - First to the target number of cards wins.
 
-import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=22';
+import { SONGS, SONGS_BY_ID, decadeBucket } from './songs.js?v=23';
 
 export const STEAL_COST = 3;
 
@@ -30,10 +30,15 @@ export function deckFor(decades) {
   return SONGS.filter((s) => decades.includes(decadeBucket(s.year))).map((s) => s.id);
 }
 
-export function newGame({ names, target, startTokens, decades }) {
-  const deck = shuffle(deckFor(decades));
+// `exclude` lists songs already heard (e.g. in the game before a rematch). If too few songs
+// would be left, the whole pool is used again so the game can still be played.
+export function newGame({ names, target, startTokens, decades, exclude = [] }) {
+  const pool = deckFor(decades);
   const minCards = target * 2 + 2;
-  if (deck.length < minCards) throw new Error(`Pick more decades: need at least ${minCards} songs, have ${deck.length}.`);
+  if (pool.length < minCards) throw new Error(`Pick more decades: need at least ${minCards} songs, have ${pool.length}.`);
+  const skip = new Set(exclude);
+  const unheard = pool.filter((id) => !skip.has(id));
+  const deck = shuffle(unheard.length >= minCards ? unheard : pool);
   const state = {
     version: 2,
     settings: { target, startTokens, decades },
@@ -149,7 +154,14 @@ export function toggleNamed(state) {
   return { ...next, turn: { ...turn, named } };
 }
 
-// Free swap for when a song can't be played (e.g. not available on Spotify).
+// Every song in this game's pool that has been heard or dealt so far (including songs left out
+// because an earlier game used them), so a rematch can avoid all of them.
+export function usedSongs(state) {
+  const remaining = new Set(state.deck);
+  return deckFor(state.settings.decades).filter((id) => !remaining.has(id));
+}
+
+// Free skip: the current player gets a new mystery song on the same turn.
 export function replaceSong(state) {
   if (state.turn?.phase !== 'listen') return state;
   return startTurn({ ...state, turnNumber: state.turnNumber - 1 }, { offerSteal: false });
