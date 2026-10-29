@@ -1,6 +1,6 @@
-import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=27';
-import * as G from './game.js?v=27';
-import * as S from './spotify.js?v=27';
+import { SONGS, ARTIST_COUNT, DECADES, decadeOf } from './songs.js?v=28';
+import * as G from './game.js?v=28';
+import * as S from './spotify.js?v=28';
 
 const app = document.getElementById('app');
 const SAVE_KEY = 'hitster.game';
